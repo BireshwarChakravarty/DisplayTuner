@@ -1,0 +1,8 @@
+.qa/
+.DS_Store
+DisplayTuner/.build/
+DisplayTuner/.swiftpm/
+DisplayTuner/dist/
+DisplayTuner/Resources/AppIcon.png
+DisplayTuner/Resources/AppIcon.icns
+DisplayTuner/Resources/AppIcon.iconset/
