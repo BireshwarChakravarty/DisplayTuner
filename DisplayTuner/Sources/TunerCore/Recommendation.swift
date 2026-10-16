@@ -3,13 +3,21 @@ import Foundation
 /// DDC/CI VCP feature codes (VESA MCCS).
 public enum VCP {
     public static let restoreFactoryDefaults: UInt8 = 0x04
-    public static let restoreFactoryLuminanceContrast: UInt8 = 0x06
+    public static let restoreFactoryLuminanceContrast: UInt8 = 0x05
     public static let brightness: UInt8 = 0x10
     public static let contrast: UInt8 = 0x12
     /// Colour preset (non-continuous): see `ColorPreset`.
     public static let colorPreset: UInt8 = 0x14
     public static let volume: UInt8 = 0x62
     public static let powerMode: UInt8 = 0xD6
+
+    /// MCCS names for controls worth showing a person.
+    public static let knownNames: [UInt8: String] = [
+        0x10: "Brightness", 0x12: "Contrast", 0x14: "Colour presets",
+        0x16: "Red gain", 0x18: "Green gain", 0x1A: "Blue gain",
+        0x60: "Input source", 0x62: "Volume", 0x72: "Gamma", 0x87: "Sharpness",
+        0x8D: "Mute", 0xD6: "Power mode", 0xDC: "Picture modes"
+    ]
 
     public static func name(_ code: UInt8) -> String {
         switch code {
@@ -29,6 +37,16 @@ public enum ColorPreset: UInt16, Sendable {
     case k6500 = 0x05
     case k9300 = 0x08
     case user1 = 0x0B
+
+    /// MCCS name for any VCP 0x14 value, including ones without a case here.
+    public static func name(_ raw: UInt16) -> String {
+        let names: [UInt16: String] = [
+            0x01: "sRGB", 0x02: "Native", 0x03: "4000 K", 0x04: "5000 K", 0x05: "6500 K",
+            0x06: "7500 K", 0x07: "8200 K", 0x08: "9300 K", 0x09: "10000 K", 0x0A: "11500 K",
+            0x0B: "User 1", 0x0C: "User 2", 0x0D: "User 3"
+        ]
+        return names[raw] ?? String(format: "0x%02X", raw)
+    }
 
     public var label: String {
         switch self {

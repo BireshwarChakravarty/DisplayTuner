@@ -102,6 +102,47 @@ final class Arm64DDC: @unchecked Sendable {
         return nil
     }
 
+    /// The monitor's DDC/CI capabilities string: every control it supports and
+    /// the values it accepts. Read in fragments of up to 32 bytes; nil if the
+    /// monitor doesn't answer.
+    func capabilities(for display: DisplayIdentity) -> String? {
+        guard let service = cache[display] ?? findService(for: display) else { return nil }
+        var text: [UInt8] = []
+        var offset: UInt16 = 0
+        var seeds: [UInt8] = [0x6E, 0x6E ^ 0x51]
+        while offset < 2048 {
+            var fragment: [UInt8]?
+            attempts: for seed in seeds {
+                let request = DDCPacket.withChecksum(DDCPacket.capabilitiesRequestBody(offset: offset), seed: seed)
+                for _ in 0..<3 {
+                    guard send(request, to: service) else { continue }
+                    usleep(60_000) // MCCS allows the monitor 50 ms to prepare a reply
+                    var reply = [UInt8](repeating: 0, count: DDCPacket.capabilitiesReplyLength)
+                    let result = reply.withUnsafeMutableBytes { raw -> IOReturn in
+                        IOAVServiceReadI2C(service, 0x37, 0x51, raw.baseAddress!, UInt32(raw.count))
+                    }
+                    if result == KERN_SUCCESS, let data = DDCPacket.parseCapabilitiesReply(reply, offset: offset) {
+                        fragment = data
+                        seeds = [seed] // this monitor's checksum convention; skip the other from now on
+                        break attempts
+                    }
+                    usleep(30_000)
+                }
+            }
+            guard let fragment else {
+                // A partial list could hide supported values, so use none of it.
+                Log.ddc.notice("Capabilities read stopped at offset \(offset) on \(display.name, privacy: .public)")
+                return nil
+            }
+            if fragment.isEmpty { break }
+            text += fragment
+            if fragment.contains(0) { break }
+            offset += UInt16(fragment.count)
+        }
+        let string = String(decoding: text.prefix { $0 != 0 }, as: UTF8.self)
+        return string.isEmpty ? nil : string
+    }
+
     /// The product name from the EDID, for displays NSScreen doesn't list
     /// (mirrors).
     func productName(for id: CGDirectDisplayID) -> String? {

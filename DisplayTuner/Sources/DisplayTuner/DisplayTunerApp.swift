@@ -30,7 +30,7 @@ struct DisplayTunerApp: App {
             }
         }
         MenuBarExtra("Display Tuner", systemImage: "dial.medium") { MenuBarView().environmentObject(model) }
-        Settings { StudioSettingsView() }
+        Settings { StudioSettingsView().environmentObject(model) }
     }
 }
 

@@ -89,6 +89,8 @@ public enum DDCStatus: Hashable, Sendable {
 public struct DisplayFacts: Hashable, Sendable, Identifiable {
     public var id: UInt32
     public var persistentID: String?
+    /// What the monitor says it supports over DDC/CI (nil until read).
+    public var capabilities: MonitorCapabilities?
     public var name: String
     public var vendorID: UInt32
     public var productID: UInt32
@@ -113,9 +115,10 @@ public struct DisplayFacts: Hashable, Sendable, Identifiable {
                 isBuiltIn: Bool = false, mirrorOf: UInt32? = nil, modes: [DisplayMode] = [],
                 currentMode: DisplayMode? = nil, widthMM: Double? = nil, primaries: Primaries? = nil,
                 profileName: String? = nil, customProfilePath: String? = nil, edrHeadroom: Double = 1,
-                ddc: DDCStatus = .unknown, persistentID: String? = nil) {
+                ddc: DDCStatus = .unknown, persistentID: String? = nil, capabilities: MonitorCapabilities? = nil) {
         self.id = id
         self.persistentID = persistentID
+        self.capabilities = capabilities
         self.name = name
         self.vendorID = vendorID
         self.productID = productID

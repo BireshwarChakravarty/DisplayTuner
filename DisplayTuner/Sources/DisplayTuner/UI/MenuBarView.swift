@@ -8,6 +8,10 @@ struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
+        if let auto = model.autoState {
+            Text("Auto: \(auto.useCase.title) for \(auto.appName)")
+            Divider()
+        }
         Text("Set all screens for")
         ForEach(UseCase.allCases) { useCase in
             Button {

@@ -21,7 +21,16 @@ jobs:
         run: bash DisplayTuner/make-app.sh --package
       - name: Verify
         run: codesign --verify --deep --strict "DisplayTuner/.build/app/Display Tuner.app"
+      - name: Screenshots (demo workspace, no hardware access)
+        continue-on-error: true
+        run: bash scripts/screenshots.sh "DisplayTuner/.build/app/Display Tuner.app" screenshots
       - uses: actions/upload-artifact@v4
         with:
           name: DisplayTuner
           path: DisplayTuner/dist/*
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Screenshots
+          path: screenshots/*.png
+          if-no-files-found: ignore

@@ -52,6 +52,15 @@ final class AppModel: ObservableObject {
     private let nightShift = NightShift()
     /// DDC state per monitor (by DisplayFacts.key), so it survives refreshes.
     private var ddcStatus: [String: DDCStatus] = [:]
+    /// What each monitor reported it supports (by DisplayFacts.key).
+    private var capabilityCache: [String: MonitorCapabilities] = [:]
+    /// Automatic presets: what's applied because of the app in front, and the
+    /// presets the person had chosen before, to return to.
+    @Published var autoState: AutoState?
+    var autoBaseline: [UInt32: UseCase] = [:]
+    var autoObserver: NSObjectProtocol?
+    var autoTask: Task<Void, Never>?
+    var hintPanels: [NSPanel] = []
     private var screenObserver: NSObjectProtocol?
     private var confirmTask: Task<Void, Never>?
 
@@ -63,10 +72,14 @@ final class AppModel: ObservableObject {
             displays = DemoDisplays.make()
             selectedID = displays.first?.id
             nightShiftEnabled = false
-            if ProcessInfo.processInfo.arguments.contains("--patterns") { section = .patterns }
+            let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("--patterns") { section = .patterns }
+            if arguments.contains("--presets") { section = .presets }
+            if arguments.contains("--activity") { section = .activity }
             return
         }
         refresh()
+        startAutoSwitching()
         if let recovery = SnapshotStore.load(.pending) {
             pendingSnapshot = recovery
             recoveryRequired = true
@@ -95,6 +108,7 @@ final class AppModel: ObservableObject {
         if rescan || topologyChanged {
             probeGeneration += 1
             ddcStatus.removeAll()
+            capabilityCache.removeAll()
             let ddc = self.ddc
             ddcQueue.async { ddc.invalidate() }
         }
@@ -102,6 +116,7 @@ final class AppModel: ObservableObject {
         var found = DisplayDetector.detect { id in ddc.productName(for: id) }
         for index in found.indices where !found[index].isBuiltIn {
             found[index].ddc = found[index].mirrorOf != nil ? .unavailable : (ddcStatus[found[index].key] ?? .unknown)
+            found[index].capabilities = capabilityCache[found[index].key]
         }
         displays = found
         nightShiftEnabled = nightShift.isEnabled()
@@ -133,6 +148,15 @@ final class AppModel: ObservableObject {
                     self.ddcStatus[key] = status
                     self.update(key) { $0.ddc = status }
                 }
+                // Then ask what it supports (slower: a few hundred bytes over DDC).
+                guard !values.isEmpty, let text = ddc.capabilities(for: identity),
+                      let capabilities = MonitorCapabilities.parse(text) else { return }
+                Task { @MainActor [weak self] in
+                    guard let self, self.probeGeneration == generation,
+                          self.displays.contains(where: { $0.key == key }) else { return }
+                    self.capabilityCache[key] = capabilities
+                    self.update(key) { $0.capabilities = capabilities }
+                }
             }
         }
     }
@@ -151,7 +175,7 @@ final class AppModel: ObservableObject {
 
     var context: EngineContext {
         EngineContext(lighting: lighting, allDisplays: displays, nightShiftEnabled: nightShiftEnabled,
-                      switchboardInstalled: switchboardInstalled)
+                      switchboardInstalled: switchboardInstalled, rememberedColorPresets: RememberedPresets.all)
     }
 
     func useCase(for id: UInt32) -> UseCase { useCases[id] ?? .everyday }
@@ -227,21 +251,32 @@ final class AppModel: ObservableObject {
         await apply(to: targets.map(\.id))
     }
 
-    func apply(to ids: [UInt32]) async {
-        guard canChange else { return }
+    /// Apply each display's selected changes. `automatic` (app-based
+    /// switching) never changes resolution or refresh rate, so it never needs
+    /// the keep-or-revert countdown.
+    @discardableResult
+    func apply(to ids: [UInt32], automatic: Bool = false) async -> [ApplyResult] {
+        guard canChange else { return [] }
         isBusy = true
         defer { isBusy = false }
+        if !automatic { endAutoSwitch() } // the person's own choice wins
 
         refresh() // capture current modes, profiles and Night Shift before planning
         let plan: [(DisplayFacts, [PlannedChange])] = ids.compactMap { id in
             guard let display = displays.first(where: { $0.id == id }) else { return nil }
-            let selected = changes(for: display).filter { isOn($0, for: display) }
+            let selected = changes(for: display).filter { change in
+                guard isOn(change, for: display) else { return false }
+                if automatic, case .mode = change.change { return false }
+                return true
+            }
             return selected.isEmpty ? nil : (display, selected)
         }
         guard !plan.isEmpty else {
-            results = [ApplyResult(display: "", title: "Nothing to change", ok: true,
-                                   message: "These settings are already in place. Do the monitor-menu steps below.")]
-            return
+            if !automatic {
+                results = [ApplyResult(display: "", title: "Nothing to change", ok: true,
+                                       message: "These settings are already in place. Do the monitor-menu steps below.")]
+            }
+            return []
         }
 
         // Abort before any write if rollback cannot be read and persisted.
@@ -257,7 +292,7 @@ final class AppModel: ObservableObject {
             pendingSnapshot = snapshot
         } catch {
             results = [ApplyResult(display: "", title: "Changes stopped safely", ok: false, message: error.localizedDescription)]
-            return
+            return results
         }
 
         var newResults: [ApplyResult] = []
@@ -294,9 +329,10 @@ final class AppModel: ObservableObject {
         // ColorSync and the window server update shortly after.
         try? await Task.sleep(nanoseconds: 600_000_000)
         refresh()
-        record(newResults)
+        record(newResults, automatic: automatic)
         if changedMode { startConfirmation() }
         else { pendingSnapshot = nil; SnapshotStore.remove(.pending) }
+        return newResults
     }
 
     private func takeSnapshot(of plan: [(DisplayFacts, [PlannedChange])]) async throws -> Snapshot {
@@ -369,6 +405,11 @@ final class AppModel: ObservableObject {
                 var values = ddcStatus[display.key]?.values ?? display.ddc.values
                 values[target.vcp] = readBack
                 ddcStatus[display.key] = .available(values)
+                // Remember the monitor's own preset before sRGB, so gaming can return to it.
+                if target.vcp == VCP.colorPreset, raw == ColorPreset.sRGB.rawValue, readBack.current == raw,
+                   current.current != ColorPreset.sRGB.rawValue {
+                    RememberedPresets.set(current.current, for: display.key)
+                }
             }
             let name = VCP.name(target.vcp)
             let shown: (UInt16) -> String = { value in

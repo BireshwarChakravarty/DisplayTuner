@@ -78,6 +78,9 @@ struct PageHeading: View {
 }
 
 struct StudioSettingsView: View {
+    @EnvironmentObject private var model: AppModel
+    @AppStorage(AutoSwitchSettings.enabledKey) private var autoSwitch = false
+    @AppStorage(AutoSwitchSettings.gamePresetKey) private var gamePreset = UseCase.immersiveGaming.rawValue
     @AppStorage("appearance") private var appearance = "dark"
     @ViewState private var loginEnabled = SMAppService.mainApp.status == .enabled
     @ViewState private var error: String?
@@ -86,6 +89,19 @@ struct StudioSettingsView: View {
             Section("Appearance") {
                 Picker("Theme", selection: $appearance) { Text("System").tag("system"); Text("Dark studio").tag("dark"); Text("Light studio").tag("light") }
                 Text("Display Tuner requires macOS 26 or later and uses native Liquid Glass. Reduce Transparency is respected.").font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Automatic presets") {
+                Toggle("Switch presets when games and editing apps are in front", isOn: Binding(
+                    get: { autoSwitch },
+                    set: { model.setAutoSwitch(enabled: $0, gamePreset: UseCase(rawValue: gamePreset) ?? .immersiveGaming) }))
+                Picker("Games use", selection: Binding(
+                    get: { gamePreset },
+                    set: { model.setAutoSwitch(enabled: autoSwitch, gamePreset: UseCase(rawValue: $0) ?? .immersiveGaming) })) {
+                    Text(UseCase.competitiveGaming.title).tag(UseCase.competitiveGaming.rawValue)
+                    Text(UseCase.immersiveGaming.title).tag(UseCase.immersiveGaming.rawValue)
+                }.disabled(!autoSwitch)
+                Text("Photo Editing for Lightroom, Photoshop, Capture One, Affinity Photo, Pixelmator Pro and DxO. Video Editing for Final Cut Pro, DaVinci Resolve, Premiere Pro and After Effects. Games are recognised by their App Store category or Steam library. Leaving them returns your screens to your own preset. Resolution and refresh rate never change automatically.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("Startup") {
                 Toggle("Open Display Tuner at login", isOn: Binding(get: { loginEnabled }, set: { value in
@@ -102,7 +118,7 @@ struct StudioSettingsView: View {
                 Link("Source, updates & releases", destination: URL(string: "https://github.com/BireshwarChakravarty/DisplayTuner")!)
                 Text("No analytics. No account. No subscription. DDC and Night Shift depend on monitor support and macOS private APIs. Brightness estimates are not colorimeter measurements.").font(.caption).foregroundStyle(.secondary)
             }
-        }.formStyle(.grouped).padding(10).frame(width: 500, height: 490)
+        }.formStyle(.grouped).padding(10).frame(width: 520, height: 660)
             .preferredColorScheme(appearance == "system" ? nil : appearance == "dark" ? .dark : .light)
     }
 }

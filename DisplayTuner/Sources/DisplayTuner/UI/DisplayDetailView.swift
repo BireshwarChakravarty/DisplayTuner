@@ -5,7 +5,8 @@ struct DisplayDetailView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.colorScheme) private var colorScheme
     let display: DisplayFacts
-    @ViewState private var tab = ProcessInfo.processInfo.arguments.contains("--controls") ? "Fine-tune" : "Overview"
+    @ViewState private var tab = ProcessInfo.processInfo.arguments.contains("--controls") ? "Fine-tune"
+        : ProcessInfo.processInfo.arguments.contains("--research") ? "Research" : "Overview"
     @ViewState private var savingPreset = false
     @ViewState private var presetName = ""
     private var rec: Recommendation { model.recommendation(for: display) }
@@ -233,6 +234,14 @@ struct DisplayDetailView: View {
                 StudioCard { VStack(alignment: .leading, spacing: 10) {
                     Label(profile.displayName, systemImage: "books.vertical").font(.headline)
                     Text(profile.confidence).font(.callout).foregroundStyle(.secondary)
+                } }
+            }
+            if let caps = display.capabilities {
+                StudioCard { VStack(alignment: .leading, spacing: 10) {
+                    Label("What this monitor reports", systemImage: "cpu").font(.headline)
+                    Text(caps.describedControls.joined(separator: "  ·  ")).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text("Read over DDC/CI\(caps.model.map { " from \($0)" } ?? "")\(caps.mccsVersion.map { ", MCCS \($0)" } ?? ""). Hardware changes are only offered for controls listed here.")
+                        .font(.caption).foregroundStyle(.tertiary)
                 } }
             }
             ForEach(rec.notes, id: \.self) { note in Label(note, systemImage: "info.circle").font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }

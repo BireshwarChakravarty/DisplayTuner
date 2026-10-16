@@ -50,9 +50,9 @@ struct ActivityEntry: Codable, Identifiable {
 }
 
 extension AppModel {
-    func record(_ results: [ApplyResult]) {
+    func record(_ results: [ApplyResult], automatic: Bool = false) {
         guard !isDemo else { return }
-        let entries = results.map { ActivityEntry(title: $0.title, detail: "\($0.display) · \($0.message)", ok: $0.ok) }
+        let entries = results.map { ActivityEntry(title: (automatic ? "Auto · " : "") + $0.title, detail: "\($0.display) · \($0.message)", ok: $0.ok) }
         activity.insert(contentsOf: entries, at: 0)
         activity = Array(activity.prefix(100))
         UserDefaults.standard.set(try? JSONEncoder().encode(activity), forKey: "studioActivity")
@@ -112,6 +112,7 @@ extension AppModel {
             Mode: \(d.currentMode?.label ?? "Unknown")
             Calibration protected: \(d.hasCalibration)
             DDC: \(d.ddc.values.keys.sorted().map { v in "\(VCP.name(v)): \(d.ddc.values[v]!.current)/\(d.ddc.values[v]!.max)" }.joined(separator: ", "))
+            Capabilities: \(d.capabilities?.raw ?? "Not reported")
             Modes available: \(d.modes.count)
             Recommendations: \(recommendation(for: d).changes.map(\.title).joined(separator: ", "))
 
@@ -156,7 +157,8 @@ enum DemoDisplays {
         modes.append(DisplayMode(modeID: 2000, width: 1920, height: 1080, pixelWidth: 1920, pixelHeight: 1080, refreshRate: 320))
         return [DisplayFacts(id: 8001, name: "Acer Nitro XV272K V5", vendorID: 0x0472, productID: 1, serial: 1,
             modes: modes, currentMode: modes[0], widthMM: 597, primaries: .displayP3, profileName: "XV272K V5", edrHeadroom: 1.6,
-            ddc: .available([VCP.brightness: VCPValue(current: 65, max: 100), VCP.contrast: VCPValue(current: 50, max: 100), VCP.colorPreset: VCPValue(current: 2, max: 11)])),
+            ddc: .available([VCP.brightness: VCPValue(current: 65, max: 100), VCP.contrast: VCPValue(current: 50, max: 100), VCP.colorPreset: VCPValue(current: 2, max: 11)]),
+            capabilities: MonitorCapabilities.parse("(prot(monitor)type(lcd)model(Demo)vcp(10 12 14(01 05 0B) 16 18 1A 60(0F 11 12) 62 D6(01 04 05))mccs_ver(2.2))")),
             DisplayFacts(id: 8002, name: "ARZOPA Portable", vendorID: 2, productID: 2, serial: 2, mirrorOf: 8001,
                 modes: [DisplayMode(modeID: 1, width: 2560, height: 1600, pixelWidth: 2560, pixelHeight: 1600, refreshRate: 60)],
                 currentMode: DisplayMode(modeID: 1, width: 2560, height: 1600, pixelWidth: 2560, pixelHeight: 1600, refreshRate: 60),
