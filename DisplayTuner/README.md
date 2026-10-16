@@ -1,3 +1,5 @@
+> **Version 2.0:** See the [main README](../README.md) for the new Display Studio, saved presets, manual controls, test patterns, accessibility and release instructions. Calibration protection now also preserves hardware levels and monitor picture mode.
+
 # Display Tuner
 
 A Mac app that finds the best settings for each of your screens, using
@@ -56,14 +58,14 @@ display path).
 
 ```bash
 cd DisplayTuner
-./make-app.sh
+bash make-app.sh --install
 ```
 
-This builds **Display Tuner.app**, installs it in /Applications and opens it.
+This explicitly installs and opens **Display Tuner.app**. To build a ZIP without installing, use `bash make-app.sh --package`.
 It also adds a menu-bar icon (a dial) for one-click presets across all screens.
 CI builds a zipped app on every push (Actions → Display Tuner → artifact
 `DisplayTuner`). It's ad-hoc signed, so the first time, right-click → **Open**,
-or run `xattr -dr com.apple.quarantine "/Applications/Display Tuner.app"`.
+or approve it in System Settings → Privacy & Security.
 
 > [!TIP]
 > Switchboard and Display Tuner both talk DDC/CI to the Acer. After Display
