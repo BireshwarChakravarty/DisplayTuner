@@ -154,7 +154,7 @@ struct HintCard: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            Image(systemName: symbol).font(.system(size: 26, weight: .medium)).foregroundStyle(Color.studioCyan)
+            Image(systemName: symbol).font(.system(size: 26, weight: .medium)).foregroundStyle(.tint)
             Text(title).font(.system(size: 17, weight: .semibold)).multilineTextAlignment(.center)
             Text(detail).font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary).multilineTextAlignment(.center)
         }

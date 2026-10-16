@@ -76,6 +76,10 @@ final class AppModel: ObservableObject {
             if arguments.contains("--patterns") { section = .patterns }
             if arguments.contains("--presets") { section = .presets }
             if arguments.contains("--activity") { section = .activity }
+            if let index = arguments.firstIndex(of: "--usecase"), index + 1 < arguments.count,
+               let useCase = UseCase(rawValue: arguments[index + 1]) {
+                for display in displays { useCases[display.id] = useCase }
+            }
             return
         }
         refresh()

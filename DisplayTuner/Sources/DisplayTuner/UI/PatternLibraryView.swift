@@ -21,30 +21,43 @@ import SwiftUI
 
 struct PatternLibraryView: View {
     @EnvironmentObject private var model: AppModel
+
+    private var targets: [DisplayFacts] { model.displays.filter { $0.mirrorOf == nil } }
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                PageHeading(eyebrow: "See the difference", title: "Trust your eyes. Then verify.", subtitle: "Six visual checks for sharpness, clipping, gradients and colour consistency.")
-                HStack(spacing: 12) {
-                    Label("Target display", systemImage: "display").foregroundStyle(.secondary)
-                    // A plain pop-up picker renders dark-on-dark over the studio backdrop; segments stay legible.
-                    Picker("Target display", selection: $model.selectedID) {
-                        ForEach(model.displays.filter { $0.mirrorOf == nil }) { Text($0.name).tag(Optional($0.id)) }
-                    }.pickerStyle(.segmented).labelsHidden().fixedSize()
-                }.font(.callout)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 260))], spacing: 16) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Visual checks for banding, black and white clipping, sharpness and colour. They show through your current settings and don't change anything.")
+                    .foregroundStyle(.secondary)
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), spacing: 16)], spacing: 16) {
                     ForEach(TestPattern.allCases) { pattern in
-                        VStack(alignment: .leading, spacing: 14) {
-                            PatternCanvas(pattern: pattern).frame(height: 130).clipShape(RoundedRectangle(cornerRadius: 12)).accessibilityHidden(true)
-                            Label(pattern.rawValue, systemImage: pattern.symbol).font(.system(size: 14, weight: .semibold))
-                            Text(pattern.explanation).font(.system(size: 11)).foregroundStyle(.secondary).frame(minHeight: 48, alignment: .top)
-                            Button { PatternPresenter.shared.show(pattern, displayID: model.selectedID) } label: { Label("Open full screen", systemImage: "arrow.up.left.and.arrow.down.right") }
-                                .buttonStyle(StudioButton()).disabled(model.isDemo || model.selectedDisplay?.mirrorOf != nil || model.selectedID == nil)
-                        }.padding(18).background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 18))
+                        GroupBox {
+                            VStack(alignment: .leading, spacing: 10) {
+                                PatternCanvas(pattern: pattern).frame(height: 120)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6)).accessibilityHidden(true)
+                                Label(pattern.rawValue, systemImage: pattern.symbol).font(.headline)
+                                Text(pattern.explanation).font(.callout).foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, minHeight: 56, alignment: .topLeading)
+                                Button("Show Full Screen") { PatternPresenter.shared.show(pattern, displayID: model.selectedID) }
+                                    .disabled(model.isDemo || model.selectedDisplay?.mirrorOf != nil || model.selectedID == nil)
+                            }
+                            .padding(4)
+                        }
                     }
                 }
-                Text("Press Esc to close a full-screen pattern. Patterns use the current macOS colour pipeline and don’t change your display settings.").font(.caption).foregroundStyle(.secondary)
-            }.padding(30)
+                Text("Press Esc to close a full-screen pattern. These are visual checks, not a substitute for a colorimeter.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .padding(20)
+        }
+        .navigationTitle("Test Patterns")
+        .toolbar {
+            ToolbarItem {
+                Picker("Show on", selection: $model.selectedID) {
+                    ForEach(targets) { Text($0.name).tag(Optional($0.id)) }
+                }
+                .help("The display to show patterns on")
+            }
         }
     }
 }

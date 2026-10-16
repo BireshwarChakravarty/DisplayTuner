@@ -23,15 +23,14 @@ shoot() {
     wait "$pid" 2>/dev/null
     [ -f "$OUT/$name.png" ] && echo "captured $name" || echo "missing $name"
 }
-# Warm-up: the first launch on a fresh runner is slow (font and icon caches).
-"$BIN" --demo & warm=$!; sleep 12; kill "$warm" 2>/dev/null; wait "$warm" 2>/dev/null
-shoot overview-dark dark
-shoot overview-light light
-shoot finetune-dark dark --controls
-shoot research-dark dark --research
-shoot presets-dark dark --presets
-shoot patterns-dark dark --patterns
-shoot activity-dark dark --activity
+# Warm-up: the first launches on a fresh runner don't always open a window.
+for _ in 1 2; do "$BIN" --demo & warm=$!; sleep 10; kill "$warm" 2>/dev/null; wait "$warm" 2>/dev/null; done
+shoot patterns dark --patterns
+shoot presets dark --presets
+shoot activity dark --activity
+shoot display-dark dark
+shoot display-light light
+shoot display-photo-light light --usecase photoEditing
 defaults delete app.displaytuner.DisplayTuner appearance 2>/dev/null || true
 # Small previews in the log, for reviewers without artifact access.
 for f in "$OUT"/*.png; do

@@ -11,11 +11,10 @@ struct DisplayTunerApp: App {
             ContentView()
                 .environmentObject(model)
                 .onAppear { lifecycle.model = model }
-                .frame(minWidth: 1060, minHeight: 760)
+                .frame(minWidth: 880, minHeight: 600)
                 .background(WindowCaptureBridge())
         }
-        .defaultSize(width: 1260, height: 940)
-        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 1120, height: 860)
         .commands {
             CommandGroup(after: .newItem) {
                 Button("Rescan Displays") { model.refresh(rescan: true) }.keyboardShortcut("r").disabled(!model.canChange)
