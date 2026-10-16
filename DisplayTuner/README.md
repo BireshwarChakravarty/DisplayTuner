@@ -53,7 +53,7 @@ HDR headroom and DDC/CI controls.
 
 ## Install
 
-Requires macOS 14 or later on Apple Silicon (DDC/CI uses the Apple Silicon
+Requires macOS 26 or later on Apple Silicon (DDC/CI uses the Apple Silicon
 display path).
 
 ```bash
