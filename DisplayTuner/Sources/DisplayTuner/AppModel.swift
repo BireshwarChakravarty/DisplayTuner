@@ -76,17 +76,10 @@ final class AppModel: ObservableObject {
             if arguments.contains("--patterns") { section = .patterns }
             if arguments.contains("--presets") { section = .presets }
             if arguments.contains("--activity") { section = .activity }
-            if arguments.contains("--log-windows") {
-                // QA: report where windows ended up (stdout).
-                DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
-                    for window in NSApp.windows {
-                        FileHandle.standardError.write(Data("window '\(window.title)' frame \(window.frame) visible \(window.isVisible) onScreen \(window.isOnActiveSpace)\n".utf8))
-                    }
-                    FileHandle.standardError.write(Data("windows: \(NSApp.windows.count) screens \(NSScreen.screens.map(\.frame))\n".utf8))
-                }
-            }
-            if let index = arguments.firstIndex(of: "--usecase"), index + 1 < arguments.count,
-               let useCase = UseCase(rawValue: arguments[index + 1]) {
+            // "--usecase=photoEditing" (one argument: a bare word would be
+            // taken by macOS as a file to open, and then no window opens).
+            if let argument = arguments.first(where: { $0.hasPrefix("--usecase=") }),
+               let useCase = UseCase(rawValue: String(argument.dropFirst("--usecase=".count))) {
                 for display in displays { useCases[display.id] = useCase }
             }
             return
