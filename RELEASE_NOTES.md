@@ -1,6 +1,8 @@
-# Display Tuner 2.0.2 — Your display, refined
+# Display Tuner 2.0.1 — Your display, refined
 
-Version 2.0.2 includes the MIT license in the source, app bundle and release downloads. It also includes the demo preset protection from 2.0.1.
+Version 2.0.1 additionally blocks preset deletion in the demo workspace.
+
+The repository now includes an MIT license. A license-bearing v2.0.2 package is prepared on `codex/mit-license-release` and awaits publication.
 
 A redesigned native macOS workspace for understanding and tuning your displays.
 
@@ -29,7 +31,7 @@ A redesigned native macOS workspace for understanding and tuning your displays.
 
 ## Install
 
-Download **DisplayTuner-2.0.2-macOS.zip**, unzip it, and move **Display Tuner.app** to Applications.
+Download **DisplayTuner-2.0.1-macOS.zip**, unzip it, and move **Display Tuner.app** to Applications.
 
 Requires **Apple Silicon and macOS 14+**. Liquid Glass requires macOS 26+. The app is ad-hoc signed, **not Developer ID signed or notarized**. macOS may require you to approve it in System Settings → Privacy & Security after the first launch attempt. No security settings need to be disabled.
 
