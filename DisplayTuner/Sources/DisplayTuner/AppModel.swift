@@ -21,7 +21,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var displays: [DisplayFacts] = []
     @Published var selectedID: UInt32?
     @Published var lighting: RoomLighting {
-        didSet { UserDefaults.standard.set(lighting.rawValue, forKey: "lighting") }
+        didSet { if !isDemo { UserDefaults.standard.set(lighting.rawValue, forKey: "lighting") } }
     }
     @Published private(set) var useCases: [UInt32: UseCase] = [:]
     @Published private var toggles: [String: Bool] = [:]
@@ -32,6 +32,17 @@ final class AppModel: ObservableObject {
     @Published private(set) var isBusy = false
     @Published private(set) var lastSnapshot: Snapshot?
     @Published private(set) var originalSnapshot: Snapshot?
+    @Published var manualBrightness: [UInt32: Double] = [:]
+    @Published var manualContrast: [UInt32: Double] = [:]
+    @Published var savedPresets: [StudioPreset] = StudioPreset.load()
+    @Published var activity: [ActivityEntry] = ActivityEntry.load()
+    @Published var notice: String?
+    @Published var section: StudioSection = .studio
+    let isDemo = ProcessInfo.processInfo.arguments.contains("--demo")
+    private var pendingSnapshot: Snapshot?
+    @Published private(set) var recoveryRequired = false
+    private var probeGeneration = 0
+    var canChange: Bool { !isBusy && confirmation == nil && !isDemo && !recoveryRequired }
 
     static let confirmSeconds = 15
 
@@ -48,7 +59,25 @@ final class AppModel: ObservableObject {
         lighting = RoomLighting(rawValue: UserDefaults.standard.string(forKey: "lighting") ?? "") ?? .normal
         lastSnapshot = SnapshotStore.load(.last)
         originalSnapshot = SnapshotStore.load(.original)
+        if isDemo {
+            displays = DemoDisplays.make()
+            selectedID = displays.first?.id
+            nightShiftEnabled = false
+            if ProcessInfo.processInfo.arguments.contains("--patterns") { section = .patterns }
+            return
+        }
         refresh()
+        if let recovery = SnapshotStore.load(.pending) {
+            pendingSnapshot = recovery
+            recoveryRequired = true
+            Task { [weak self] in
+                guard let self else { return }
+                await self.restore(recovery)
+                self.notice = self.recoveryRequired
+                    ? "Recovery needs attention. Reconnect missing displays, then choose Retry recovery."
+                    : "Recovered settings from an interrupted display change."
+            }
+        }
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -60,11 +89,19 @@ final class AppModel: ObservableObject {
 
     var selectedDisplay: DisplayFacts? { displays.first { $0.id == selectedID } }
 
-    func refresh() {
+    func refresh(rescan: Bool = false) {
+        guard !isDemo else { return }
+        let topologyChanged = Set(DisplayDetector.onlineDisplayIDs()) != Set(displays.map(\.id))
+        if rescan || topologyChanged {
+            probeGeneration += 1
+            ddcStatus.removeAll()
+            let ddc = self.ddc
+            ddcQueue.async { ddc.invalidate() }
+        }
         let ddc = self.ddc
         var found = DisplayDetector.detect { id in ddc.productName(for: id) }
         for index in found.indices where !found[index].isBuiltIn {
-            found[index].ddc = ddcStatus[found[index].key] ?? .unknown
+            found[index].ddc = found[index].mirrorOf != nil ? .unavailable : (ddcStatus[found[index].key] ?? .unknown)
         }
         displays = found
         nightShiftEnabled = nightShift.isEnabled()
@@ -77,24 +114,24 @@ final class AppModel: ObservableObject {
     /// Read brightness, contrast and colour preset from each external monitor,
     /// once, in the background.
     private func probeDDC() {
-        for display in displays where !display.isBuiltIn && ddcStatus[display.key] == nil {
+        for display in displays where !display.isBuiltIn && display.mirrorOf == nil && ddcStatus[display.key] == nil {
             let key = display.key
             ddcStatus[key] = .probing
             update(key) { $0.ddc = .probing }
             let identity = DisplayIdentity(id: display.id, name: display.name)
             let ddc = self.ddc
-            ddcQueue.async {
+            let generation = probeGeneration
+            ddcQueue.async { [weak self] in
                 var values: [UInt8: VCPValue] = [:]
-                if let brightness = ddc.read(VCP.brightness, for: identity) {
-                    values[VCP.brightness] = brightness
-                    for vcp in [VCP.contrast, VCP.colorPreset] {
-                        if let value = ddc.read(vcp, for: identity) { values[vcp] = value }
-                    }
+                for vcp in [VCP.brightness, VCP.contrast, VCP.colorPreset] {
+                    if let value = ddc.read(vcp, for: identity) { values[vcp] = value }
                 }
                 let status: DDCStatus = values.isEmpty ? .unavailable : .available(values)
                 Task { @MainActor [weak self] in
-                    self?.ddcStatus[key] = status
-                    self?.update(key) { $0.ddc = status }
+                    guard let self, self.probeGeneration == generation,
+                          self.displays.contains(where: { $0.key == key }) else { return }
+                    self.ddcStatus[key] = status
+                    self.update(key) { $0.ddc = status }
                 }
             }
         }
@@ -120,6 +157,9 @@ final class AppModel: ObservableObject {
     func useCase(for id: UInt32) -> UseCase { useCases[id] ?? .everyday }
 
     func setUseCase(_ useCase: UseCase, for id: UInt32) {
+        guard !isBusy && confirmation == nil else { return }
+        manualBrightness[id] = nil
+        manualContrast[id] = nil
         useCases[id] = useCase
         toggles = toggles.filter { !$0.key.hasPrefix("\(id)|") }
         modeChoices[id] = nil
@@ -132,6 +172,17 @@ final class AppModel: ObservableObject {
     /// The recommendation's changes, with the mode the person picked (if any).
     func changes(for display: DisplayFacts) -> [PlannedChange] {
         var changes = recommendation(for: display).changes
+        if !display.hasCalibration {
+            for (vcp, values) in [(VCP.brightness, manualBrightness), (VCP.contrast, manualContrast)] {
+                if let value = values[display.id], let current = display.ddc.values[vcp] {
+                    let changeID = vcp == VCP.brightness ? "ddc-brightness" : "ddc-contrast"
+                    changes.removeAll { $0.id == changeID }
+                    guard abs(Double(current.percent) - value) >= 1 else { continue }
+                    changes.append(PlannedChange(id: changeID, change: .ddc(DDCTarget(vcp: vcp, value: .percent(Int(value)))),
+                        title: VCP.name(vcp), detail: "\(current.percent)% → \(Int(value))%", why: "Your manual adjustment.", onByDefault: true))
+                }
+            }
+        }
         if let chosen = modeChoices[display.id] {
             changes.removeAll { $0.id == "mode" }
             if !(display.currentMode?.matches(chosen) ?? false) {
@@ -170,16 +221,18 @@ final class AppModel: ObservableObject {
 
     /// One preset on every external screen (from the menu bar).
     func quickApply(_ useCase: UseCase) async {
+        guard canChange else { return }
         let targets = displays.filter { !$0.isBuiltIn }
         for display in targets { setUseCase(useCase, for: display.id) }
         await apply(to: targets.map(\.id))
     }
 
     func apply(to ids: [UInt32]) async {
-        guard !isBusy else { return }
+        guard canChange else { return }
         isBusy = true
         defer { isBusy = false }
 
+        refresh() // capture current modes, profiles and Night Shift before planning
         let plan: [(DisplayFacts, [PlannedChange])] = ids.compactMap { id in
             guard let display = displays.first(where: { $0.id == id }) else { return nil }
             let selected = changes(for: display).filter { isOn($0, for: display) }
@@ -191,19 +244,38 @@ final class AppModel: ObservableObject {
             return
         }
 
-        // Save how things are now, so it can all be undone.
-        let snapshot = await takeSnapshot(of: plan)
-        lastSnapshot = snapshot
-        SnapshotStore.save(snapshot, as: .last)
-        let original = originalSnapshot?.keepingOriginals(addingFrom: snapshot) ?? snapshot
-        originalSnapshot = original
-        SnapshotStore.save(original, as: .original)
+        // Abort before any write if rollback cannot be read and persisted.
+        let snapshot: Snapshot
+        do {
+            snapshot = try await takeSnapshot(of: plan)
+            let original = originalSnapshot?.keepingOriginals(addingFrom: snapshot) ?? snapshot
+            try SnapshotStore.save(original, as: .original)
+            try SnapshotStore.save(snapshot, as: .last)
+            try SnapshotStore.save(snapshot, as: .pending)
+            originalSnapshot = original
+            lastSnapshot = snapshot
+            pendingSnapshot = snapshot
+        } catch {
+            results = [ApplyResult(display: "", title: "Changes stopped safely", ok: false, message: error.localizedDescription)]
+            return
+        }
 
         var newResults: [ApplyResult] = []
         var changedMode = false
         var didNightShift = false
         for (display, changes) in plan {
-            for change in changes {
+            let ordered = changes.sorted { a, b in
+                func rank(_ c: PlannedChange) -> Int {
+                    switch c.change {
+                    case .mode: return 0
+                    case .ddc(let target): return target.vcp == VCP.colorPreset ? 1 : 3
+                    case .colorProfile: return 2
+                    case .nightShift: return 4
+                    }
+                }
+                return rank(a) < rank(b)
+            }
+            for change in ordered {
                 if case .nightShift = change.change {
                     if didNightShift { continue }
                     didNightShift = true
@@ -213,6 +285,8 @@ final class AppModel: ObservableObject {
                 if case .mode = change.change, result.ok { changedMode = true }
             }
             modeChoices[display.id] = nil
+            manualBrightness[display.id] = nil
+            manualContrast[display.id] = nil
         }
         results = newResults
         Log.apply.info("Applied \(newResults.filter(\.ok).count) of \(newResults.count) changes")
@@ -220,10 +294,12 @@ final class AppModel: ObservableObject {
         // ColorSync and the window server update shortly after.
         try? await Task.sleep(nanoseconds: 600_000_000)
         refresh()
+        record(newResults)
         if changedMode { startConfirmation() }
+        else { pendingSnapshot = nil; SnapshotStore.remove(.pending) }
     }
 
-    private func takeSnapshot(of plan: [(DisplayFacts, [PlannedChange])]) async -> Snapshot {
+    private func takeSnapshot(of plan: [(DisplayFacts, [PlannedChange])]) async throws -> Snapshot {
         var entries: [DisplaySnapshot] = []
         for (display, changes) in plan {
             let vcps: [UInt8] = changes.compactMap {
@@ -240,14 +316,23 @@ final class AppModel: ObservableObject {
                     return read
                 }
             }
+            guard vcps.allSatisfy({ values[$0] != nil }) else {
+                throw StudioError.message("Couldn’t read the original monitor settings. No changes were made. Rescan and try again.")
+            }
+            let capturesMode = changes.contains { if case .mode = $0.change { return true }; return false }
+            let capturesProfile = changes.contains { if case .colorProfile = $0.change { return true }; return false }
+            if capturesMode && display.currentMode == nil { throw StudioError.message("Current display mode could not be saved.") }
             entries.append(DisplaySnapshot(
                 key: display.key, name: display.name,
-                mode: display.mirrorOf == nil ? display.currentMode : nil,
+                mode: capturesMode && display.mirrorOf == nil ? display.currentMode : nil,
                 hadCustomProfile: display.customProfilePath != nil,
                 customProfilePath: display.customProfilePath,
-                ddc: values))
+                ddc: values, capturesProfile: capturesProfile))
         }
-        return Snapshot(displays: entries, nightShiftEnabled: nightShiftEnabled)
+        let capturesNightShift = plan.contains { $0.1.contains { if case .nightShift = $0.change { return true }; return false } }
+        let originalNightShift = capturesNightShift ? nightShift.isEnabled() : nil
+        if capturesNightShift && originalNightShift == nil { throw StudioError.message("Night Shift could not be saved for undo.") }
+        return Snapshot(displays: entries, nightShiftEnabled: originalNightShift)
     }
 
     private func perform(_ planned: PlannedChange, on display: DisplayFacts) async -> ApplyResult {
@@ -291,13 +376,14 @@ final class AppModel: ObservableObject {
                 return String(format: "0x%02X", value)
             }
             if !sent { return result(false, "The monitor didn't respond over DDC/CI.") }
-            guard let readBack else { return result(true, "\(name) sent as \(shown(raw)); the monitor didn't report it back.") }
+            guard let readBack else { return result(false, "Unverified: \(name) sent as \(shown(raw)); the monitor didn't report it back.") }
             if readBack.current == raw { return result(true, "\(name) is now \(shown(raw)).") }
             return result(false, "The monitor kept \(name.lowercased()) at \(shown(readBack.current)). It probably locks this setting in its current picture mode (sRGB modes often do). Set it in the monitor's menu.")
 
         case .nightShift(let enabled):
-            let ok = nightShift.setEnabled(enabled)
+            let accepted = nightShift.setEnabled(enabled)
             nightShiftEnabled = nightShift.isEnabled()
+            let ok = accepted && nightShiftEnabled == enabled
             return ApplyResult(display: "All screens", title: "Night Shift", ok: ok,
                                message: ok ? "Night Shift is \(enabled ? "on" : "off")." : "Couldn't change Night Shift on this Mac. Turn it off in System Settings → Displays → Night Shift.")
         }
@@ -317,6 +403,8 @@ final class AppModel: ObservableObject {
     }
 
     func keepChanges() {
+        pendingSnapshot = nil
+        SnapshotStore.remove(.pending)
         confirmTask?.cancel()
         confirmTask = nil
         confirmation = nil
@@ -326,27 +414,37 @@ final class AppModel: ObservableObject {
         confirmTask?.cancel()
         confirmTask = nil
         confirmation = nil
-        if let lastSnapshot { await restore(lastSnapshot) }
+        if let snapshot = pendingSnapshot {
+            recoveryRequired = true
+            await restore(snapshot)
+        }
     }
 
     // MARK: Restoring
 
     func undoLastApply() async {
-        guard let lastSnapshot else { return }
+        guard !isBusy && !isDemo else { return }
+        if recoveryRequired, let pendingSnapshot { await restore(pendingSnapshot); return }
+        guard canChange, let lastSnapshot else { return }
         await restore(lastSnapshot)
     }
 
     func restoreOriginals() async {
-        guard let originalSnapshot else { return }
+        guard canChange, let originalSnapshot else { return }
         await restore(originalSnapshot)
     }
 
     private func restore(_ snapshot: Snapshot) async {
-        guard !isBusy else { return }
+        guard !isBusy && !isDemo else { return }
         isBusy = true
+        refresh()
         defer { isBusy = false }
 
         var newResults: [ApplyResult] = []
+        for saved in snapshot.displays where !displays.contains(where: { $0.key == saved.key }) {
+            newResults.append(ApplyResult(display: saved.name, title: "Display disconnected", ok: false,
+                message: "Reconnect this display and choose Undo to restore its settings."))
+        }
         for display in displays {
             guard let saved = snapshot.display(display.key) else { continue }
 
@@ -356,19 +454,29 @@ final class AppModel: ObservableObject {
                                               message: ok ? "Back to \(mode.label)." : "Couldn't switch back to \(mode.label)."))
             }
 
-            if saved.customProfilePath != display.customProfilePath {
+            if saved.capturesProfile && saved.customProfilePath != display.customProfilePath {
                 let url = saved.hadCustomProfile ? saved.customProfilePath.map { URL(fileURLWithPath: $0) } : nil
                 let ok = ColorProfiles.setProfile(url, for: display.id)
                 newResults.append(ApplyResult(display: display.name, title: "Colour profile", ok: ok,
                                               message: ok ? "Back to \(url?.deletingPathExtension().lastPathComponent ?? "the display's own profile")." : "ColorSync didn't accept the change."))
             }
 
-            if !saved.ddc.isEmpty {
+            if !saved.ddc.isEmpty && display.mirrorOf == nil {
                 let identity = DisplayIdentity(id: display.id, name: display.name)
                 let ddc = self.ddc
                 let values = saved.ddc
                 let failed = await onDDCQueue { () -> [UInt8] in
-                    values.compactMap { vcp, value in ddc.write(vcp, value: value, for: identity) ? nil : vcp }
+                    let ordered = values.keys.sorted { a, b in
+                        if a == b { return false }
+                        if a == VCP.colorPreset { return true }
+                        if b == VCP.colorPreset { return false }
+                        return a < b
+                    }
+                    return ordered.compactMap { vcp in
+                        guard let value = values[vcp], ddc.write(vcp, value: value, for: identity) else { return vcp }
+                        usleep(150_000)
+                        return ddc.read(vcp, for: identity)?.current == value ? nil : vcp
+                    }
                 }
                 newResults.append(ApplyResult(
                     display: display.name, title: "Monitor settings", ok: failed.isEmpty,
@@ -380,7 +488,7 @@ final class AppModel: ObservableObject {
         }
 
         if let wanted = snapshot.nightShiftEnabled, wanted != nightShiftEnabled {
-            let ok = nightShift.setEnabled(wanted)
+            let ok = nightShift.setEnabled(wanted) && nightShift.isEnabled() == wanted
             newResults.append(ApplyResult(display: "All screens", title: "Night Shift", ok: ok,
                                           message: ok ? "Night Shift is \(wanted ? "on" : "off") again." : "Couldn't change Night Shift."))
         }
@@ -389,7 +497,13 @@ final class AppModel: ObservableObject {
             ? [ApplyResult(display: "", title: "Nothing to restore", ok: true, message: "Everything already matches.")]
             : newResults
         try? await Task.sleep(nanoseconds: 600_000_000)
-        refresh()
+        refresh(rescan: true)
+        record(newResults)
+        if newResults.allSatisfy(\.ok) {
+            SnapshotStore.remove(.pending)
+            pendingSnapshot = nil
+            recoveryRequired = false
+        } else if pendingSnapshot != nil { recoveryRequired = true }
     }
 }
 
@@ -400,6 +514,7 @@ enum SnapshotStore {
         case last
         /// Before Display Tuner first changed each setting.
         case original
+        case pending
     }
 
     private static var directory: URL {
@@ -413,13 +528,13 @@ enum SnapshotStore {
         return try? JSONDecoder().decode(Snapshot.self, from: data)
     }
 
-    static func save(_ snapshot: Snapshot, as name: Name) {
-        do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let data = try JSONEncoder().encode(snapshot)
-            try data.write(to: directory.appendingPathComponent("\(name.rawValue).json"), options: .atomic)
-        } catch {
-            Log.apply.error("Couldn't save snapshot: \(error.localizedDescription, privacy: .public)")
-        }
+    static func save(_ snapshot: Snapshot, as name: Name) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let data = try JSONEncoder().encode(snapshot)
+        try data.write(to: directory.appendingPathComponent("\(name.rawValue).json"), options: .atomic)
+    }
+
+    static func remove(_ name: Name) {
+        try? FileManager.default.removeItem(at: directory.appendingPathComponent("\(name.rawValue).json"))
     }
 }

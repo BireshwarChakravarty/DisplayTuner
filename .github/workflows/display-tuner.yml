@@ -1,40 +1,27 @@
 name: Display Tuner
-
 on:
   push:
-    paths:
-      - "DisplayTuner/**"
-      - ".github/workflows/display-tuner.yml"
+    paths: ["DisplayTuner/**", "scripts/**", ".github/workflows/display-tuner.yml"]
   pull_request:
-    paths:
-      - "DisplayTuner/**"
+    paths: ["DisplayTuner/**", "scripts/**", ".github/workflows/**"]
   workflow_dispatch:
-
+permissions:
+  contents: read
+concurrency:
+  group: display-tuner-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: macos-26
-    defaults:
-      run:
-        working-directory: DisplayTuner
     steps:
       - uses: actions/checkout@v5
-
-      - name: Toolchain
-        run: |
-          sw_vers
-          swift --version
-
-      - name: Build
-        run: swift build -c release
-
-      - name: Test
-        run: swift test
-
-      - name: Package app
-        run: ./make-app.sh --package
-
-      - name: Upload app
-        uses: actions/upload-artifact@v4
+      - name: Core tests
+        run: swift test --package-path DisplayTuner
+      - name: Package
+        run: bash DisplayTuner/make-app.sh --package
+      - name: Verify
+        run: codesign --verify --deep --strict "DisplayTuner/.build/app/Display Tuner.app"
+      - uses: actions/upload-artifact@v4
         with:
           name: DisplayTuner
-          path: DisplayTuner/dist/DisplayTuner.zip
+          path: DisplayTuner/dist/*

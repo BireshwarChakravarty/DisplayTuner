@@ -30,7 +30,7 @@ public enum RecommendationEngine {
         builder.planMode()
         builder.planRefreshExtras()
         builder.planColour()
-        builder.planBrightnessAndContrast()
+        if !display.hasCalibration { builder.planBrightnessAndContrast() }
         builder.planNightShift()
         builder.planMonitorMenu()
         builder.planHDR()
@@ -324,6 +324,10 @@ public enum RecommendationEngine {
         // MARK: Monitor menu
 
         mutating func planMonitorMenu() {
+            if display.hasCalibration {
+                notes.append("Calibration protected: keep the monitor’s calibrated picture mode, brightness, contrast and white point unchanged. Presets only change resolution, refresh rate and Night Shift.")
+                return
+            }
             if let profile {
                 for item in profile.osd where item.useCases.contains(useCase) {
                     step(.monitorMenu, item.setting, item.value, path: item.path, why: item.why, sources: item.sourceIDs)

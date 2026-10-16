@@ -52,29 +52,31 @@ final class Arm64DDC: @unchecked Sendable {
         let info: FramebufferInfo
     }
 
-    private var cache: [CGDirectDisplayID: IOAVService] = [:]
+    private var cache: [DisplayIdentity: IOAVService] = [:]
+
+    func invalidate() { cache.removeAll() }
 
     /// Set a VCP feature. Returns true if the monitor acknowledged the write.
     func write(_ vcp: UInt8, value: UInt16, for display: DisplayIdentity) -> Bool {
         let packet = DDCPacket.withChecksum(DDCPacket.setVCPBody(vcp, value: value))
 
-        if let cached = cache[display.id] {
+        if let cached = cache[display] {
             if send(packet, to: cached) { return true }
-            cache[display.id] = nil // stale handle: look the display up again
+            cache[display] = nil // stale handle: look the display up again
         }
         guard let service = findService(for: display) else {
             Log.ddc.error("No DDC service matched \(display.name, privacy: .public) (display \(display.id))")
             return false
         }
         guard send(packet, to: service) else { return false }
-        cache[display.id] = service
+        cache[display] = service
         return true
     }
 
     /// Read a VCP feature (current and maximum value), or nil if the monitor
     /// doesn't answer or doesn't support it.
     func read(_ vcp: UInt8, for display: DisplayIdentity) -> VCPValue? {
-        guard let service = cache[display.id] ?? findService(for: display) else { return nil }
+        guard let service = cache[display] ?? findService(for: display) else { return nil }
         let body = DDCPacket.getVCPBody(vcp)
         // m1ddc and MonitorControl seed a read request's checksum with 0x6E
         // alone on Apple Silicon; fall back to the standard seed if that
@@ -89,12 +91,13 @@ final class Arm64DDC: @unchecked Sendable {
                     IOAVServiceReadI2C(service, 0x37, 0x51, raw.baseAddress!, UInt32(raw.count))
                 }
                 if result == KERN_SUCCESS, let value = DDCPacket.parseReply(reply, vcp: vcp) {
-                    cache[display.id] = service
+                    cache[display] = service
                     return value
                 }
                 usleep(20_000)
             }
         }
+        cache[display] = nil // retry with a fresh registry handle on the next read
         Log.ddc.notice("No reply reading VCP \(String(format: "0x%02X", vcp), privacy: .public) from \(display.name, privacy: .public)")
         return nil
     }
@@ -128,6 +131,11 @@ final class Arm64DDC: @unchecked Sendable {
     // MARK: DisplayIdentity → IOAVService
 
     private func findService(for display: DisplayIdentity) -> IOAVService? {
+        // Identical serial-less displays cannot be safely mapped by model alone.
+        let twins = DisplayDetector.onlineDisplayIDs().filter {
+            CGDisplayVendorNumber($0) == display.vendor && CGDisplayModelNumber($0) == display.model
+        }
+        if twins.count > 1 && (display.serial == 0 || twins.contains(where: { $0 != display.id && CGDisplaySerialNumber($0) == display.serial })) { return nil }
         let candidates = collectCandidates()
         let scored = candidates.map { ($0, score($0.info, against: display)) }
 
@@ -136,37 +144,22 @@ final class Arm64DDC: @unchecked Sendable {
             Log.ddc.info("  candidate \(candidate.info.productName ?? "?", privacy: .public), EDID UUID \(candidate.info.edidUUID, privacy: .public), score \(score)")
         }
 
-        if let best = scored.max(by: { $0.1 < $1.1 }), best.1 > 0 {
-            return best.0.service
+        let valid = scored.filter { $0.1 > 0 }.sorted { $0.1 > $1.1 }
+        guard let best = valid.first, valid.count == 1 || best.1 > valid[1].1 else {
+            Log.ddc.notice("DDC identity is missing or ambiguous; refusing access")
+            return nil
         }
-        // Nothing identifiable, but only one DDC port: it must be this one
-        // (Switchboard's rule, which is how some monitors get matched). Not
-        // for a mirror, though: a mirrored portable without DDC would then
-        // "find" the main monitor's port, and changes would land on the wrong
-        // screen.
-        if candidates.count == 1 && CGDisplayMirrorsDisplay(display.id) == kCGNullDirectDisplay {
-            return candidates[0].service
-        }
-        return nil
+        return best.0.service
     }
 
     private func score(_ info: FramebufferInfo, against display: DisplayIdentity) -> Int {
-        var score = 0
-        // "EDID UUID" starts with the EDID vendor ID (big-endian hex) and the
-        // product code (little-endian hex).
         let uuid = info.edidUUID.uppercased()
-        if uuid.count >= 8 {
-            let vendorHex = String(format: "%04X", display.vendor & 0xFFFF)
-            let modelHex = String(format: "%02X%02X", display.model & 0xFF, (display.model >> 8) & 0xFF)
-            if uuid.prefix(4) == vendorHex { score += 1 }
-            if uuid.dropFirst(4).prefix(4) == modelHex { score += 1 }
-        }
-        if let vendor = info.vendor, vendor == display.vendor { score += 1 }
-        if let model = info.model, model == display.model { score += 1 }
-        // The serial is what tells two identical monitors apart.
-        if display.serial != 0, let serial = info.serial, serial == display.serial { score += 2 }
-        if let name = info.productName, !name.isEmpty, name == display.name { score += 1 }
-        return score
+        let vendor = info.vendor ?? (uuid.count >= 8 ? UInt32(uuid.prefix(4), radix: 16) : nil)
+        let productHex = String(uuid.dropFirst(4).prefix(4))
+        let model: UInt32? = info.model ?? (productHex.count == 4 ? UInt32(productHex.suffix(2) + productHex.prefix(2), radix: 16) : nil)
+        return MonitorMatcher.score(
+            targetVendor: display.vendor, targetModel: display.model, targetSerial: display.serial,
+            candidateVendor: vendor, candidateModel: model, candidateSerial: info.serial)
     }
 
     /// Walk the IOService plane collecting external DDC services, each paired
