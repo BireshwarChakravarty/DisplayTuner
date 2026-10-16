@@ -1,4 +1,4 @@
-# Next release — native redesign, monitor capabilities and automatic presets
+# Display Tuner 2.1.0 — native redesign, monitor capabilities and automatic presets
 
 ## A native Mac app
 - Redesigned in the style of System Settings: a standard sidebar with your displays and a Library (presets, test patterns, activity), and one page per display in task order: what you're doing, the changes, the steps for the monitor, System Settings, cable and apps, then adjustments and display details.
@@ -25,7 +25,7 @@
 - Preserve the opaque accessibility surface when Reduce Transparency is enabled.
 - Update Settings and installation documentation to match the new requirement.
 
-The previously published v2.0.2 release below retains its original system requirements.
+Requires Apple Silicon and macOS 26 or later. The app is ad-hoc signed, not notarized: on first launch, approve it in System Settings → Privacy & Security.
 
 ---
 
