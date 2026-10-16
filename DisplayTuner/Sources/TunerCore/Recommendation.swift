@@ -70,6 +70,8 @@ public struct DDCTarget: Hashable, Codable, Sendable {
     public var vcp: UInt8
     public var value: Value
 
+    public init(vcp: UInt8, value: Value) { self.vcp = vcp; self.value = value }
+
     public func rawValue(max: UInt16) -> UInt16 {
         switch value {
         case .raw(let v): return v
