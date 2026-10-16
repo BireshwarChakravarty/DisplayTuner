@@ -88,6 +88,7 @@ public enum DDCStatus: Hashable, Sendable {
 /// Everything the app detected about one connected display.
 public struct DisplayFacts: Hashable, Sendable, Identifiable {
     public var id: UInt32
+    public var persistentID: String?
     public var name: String
     public var vendorID: UInt32
     public var productID: UInt32
@@ -112,8 +113,9 @@ public struct DisplayFacts: Hashable, Sendable, Identifiable {
                 isBuiltIn: Bool = false, mirrorOf: UInt32? = nil, modes: [DisplayMode] = [],
                 currentMode: DisplayMode? = nil, widthMM: Double? = nil, primaries: Primaries? = nil,
                 profileName: String? = nil, customProfilePath: String? = nil, edrHeadroom: Double = 1,
-                ddc: DDCStatus = .unknown) {
+                ddc: DDCStatus = .unknown, persistentID: String? = nil) {
         self.id = id
+        self.persistentID = persistentID
         self.name = name
         self.vendorID = vendorID
         self.productID = productID
@@ -131,7 +133,16 @@ public struct DisplayFacts: Hashable, Sendable, Identifiable {
     }
 
     /// Stable key for remembering this monitor across reconnects.
-    public var key: String { String(format: "%04X-%04X-%08X", vendorID, productID, serial) }
+    public var key: String {
+        persistentID ?? (serial != 0
+            ? String(format: "%04X-%04X-%08X", vendorID, productID, serial)
+            : "session-\(id)")
+    }
+
+    public var hasCalibration: Bool {
+        guard let path = customProfilePath else { return false }
+        return !path.hasPrefix("/System/Library/ColorSync/Profiles/")
+    }
 
     public var maxRefresh: Double { modes.map(\.refreshRate).max() ?? 0 }
 
