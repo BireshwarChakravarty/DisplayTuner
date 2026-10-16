@@ -4,6 +4,11 @@ on:
     branches: ["claude/lucid-bell-7thkev"]
     paths: ["release.json"]
   workflow_dispatch:
+    inputs:
+      replace:
+        description: "Replace an existing release with the same version"
+        type: boolean
+        default: false
 permissions:
   contents: write
 concurrency:
@@ -36,12 +41,16 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
+          REPLACE: ${{ inputs.replace }}
         run: |
+          if [ "$REPLACE" = "true" ]; then
+            gh release delete "$TAG" --yes --cleanup-tag || true
+          fi
           gh release create "$TAG" \
             "DisplayTuner/dist/DisplayTuner-$VERSION-macOS.zip" \
             DisplayTuner/dist/SHA256SUMS.txt \
             DisplayTuner/dist/DisplayTuner-Icon.png \
             LICENSE \
             --target "$GITHUB_SHA" \
-            --title "Display Tuner $VERSION — Your display, refined" \
+            --title "Display Tuner $VERSION" \
             --notes-file RELEASE_NOTES.md
