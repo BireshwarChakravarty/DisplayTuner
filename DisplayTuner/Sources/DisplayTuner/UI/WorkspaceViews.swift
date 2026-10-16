@@ -98,7 +98,7 @@ struct StudioSettingsView: View {
                 if let error { Text(error).font(.caption).foregroundStyle(.orange) }
             }
             Section("About Display Tuner") {
-                HStack(spacing: 14) { AppMark().frame(width: 50, height: 50); VStack(alignment: .leading, spacing: 4) { Text("Display Tuner 2.0.0").font(.headline); Text("A better view, every day.").foregroundStyle(.secondary) } }
+                HStack(spacing: 14) { AppMark().frame(width: 50, height: 50); VStack(alignment: .leading, spacing: 4) { Text("Display Tuner \(AppVersion.current)").font(.headline); Text("A better view, every day.").foregroundStyle(.secondary) } }
                 Link("Source, updates & releases", destination: URL(string: "https://github.com/BireshwarChakravarty/DisplayTuner")!)
                 Text("No analytics. No account. No subscription. DDC and Night Shift depend on monitor support and macOS private APIs. Brightness estimates are not colorimeter measurements.").font(.caption).foregroundStyle(.secondary)
             }
