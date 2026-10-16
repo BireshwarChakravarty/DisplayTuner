@@ -3,6 +3,10 @@ import SwiftUI
 import UniformTypeIdentifiers
 import TunerCore
 
+enum AppVersion {
+    static var current: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.0.1" }
+}
+
 enum StudioSection: String, CaseIterable, Identifiable {
     case studio = "Display Studio", presets = "Saved Presets", patterns = "Test Patterns", activity = "Activity"
     var id: String { rawValue }
@@ -95,7 +99,7 @@ extension AppModel {
 
     func exportDiagnostics() {
         let report = """
-        Display Tuner 2.0.0 — Diagnostics
+        Display Tuner \(AppVersion.current) — Diagnostics
         Generated: \(Date().formatted())
         System: \(ProcessInfo.processInfo.operatingSystemVersionString)
         Mode: \(isDemo ? "Demo (simulated displays)" : "Live hardware")
