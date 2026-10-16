@@ -1,39 +1,32 @@
 #!/bin/bash
-# Builds "Display Tuner.app" (ad-hoc signed) and installs it in /Applications.
-# Usage: ./make-app.sh             build and install
-#        ./make-app.sh --package   build dist/DisplayTuner.zip only (for CI)
+# Build a signed app and ZIP. Installation is explicit: --install.
 set -euo pipefail
 cd "$(dirname "$0")"
-
-PACKAGE_ONLY=false
-[ "${1:-}" = "--package" ] && PACKAGE_ONLY=true
-
+MODE="${1:---package}"
+case "$MODE" in --package|--install|--stage) ;; *) echo 'Usage: make-app.sh [--package|--stage|--install]' >&2; exit 2 ;; esac
+VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)
 APP="Display Tuner.app"
 STAGE=".build/app/$APP"
-
-echo "==> Building release binary"
-swift build -c release
-
-echo "==> Assembling $APP"
+python3 ../scripts/build-assets.py
+swift build --arch arm64 -c release
+BIN_DIR=$(swift build --arch arm64 -c release --show-bin-path)
 rm -rf "$STAGE"
 mkdir -p "$STAGE/Contents/MacOS" "$STAGE/Contents/Resources"
-cp "$(swift build -c release --show-bin-path)/DisplayTuner" "$STAGE/Contents/MacOS/DisplayTuner"
+cp "$BIN_DIR/DisplayTuner" "$STAGE/Contents/MacOS/DisplayTuner"
 cp Resources/Info.plist "$STAGE/Contents/Info.plist"
-BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' Resources/Info.plist)"
-codesign --force --sign - --requirements "=designated => identifier \"$BUNDLE_ID\"" "$STAGE"
-
-if $PACKAGE_ONLY; then
-    echo "==> Packaging dist/DisplayTuner.zip"
-    mkdir -p dist
-    rm -f dist/DisplayTuner.zip
-    ditto -c -k --keepParent "$STAGE" dist/DisplayTuner.zip
-    echo "Done: dist/DisplayTuner.zip"
-    exit 0
+cp Resources/AppIcon.icns "$STAGE/Contents/Resources/AppIcon.icns"
+codesign --force --sign - "$STAGE"
+codesign --verify --deep --strict "$STAGE"
+if [[ "$MODE" == --stage ]]; then echo "Built: $STAGE"; exit 0; fi
+mkdir -p dist
+cp Resources/AppIcon.png dist/DisplayTuner-Icon.png
+ARCHIVE="DisplayTuner-$VERSION-macOS.zip"
+rm -f "dist/$ARCHIVE"
+ditto -c -k --keepParent "$STAGE" "dist/$ARCHIVE"
+(cd dist && shasum -a 256 "$ARCHIVE" > SHA256SUMS.txt)
+if [[ "$MODE" == --install ]]; then
+    # ditto updates the app bundle without deleting unrelated files.
+    ditto "$STAGE" "/Applications/$APP"
+    open "/Applications/$APP"
 fi
-
-echo "==> Installing to /Applications"
-pkill -x DisplayTuner 2>/dev/null || true
-rm -rf "/Applications/$APP"
-cp -R "$STAGE" /Applications/
-open "/Applications/$APP"
-echo "Done. Display Tuner is open (and in the menu bar)."
+echo "Built: dist/$ARCHIVE"
