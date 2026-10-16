@@ -1,6 +1,6 @@
 # Display Tuner 2.0.1 — Your display, refined
 
-Version 2.0.1 additionally blocks preset deletion in the demo workspace.
+Version 2.0.1 additionally blocks preset deletion in the demo workspace and includes the MIT license in the source, app bundle and release downloads.
 
 A redesigned native macOS workspace for understanding and tuning your displays.
 
