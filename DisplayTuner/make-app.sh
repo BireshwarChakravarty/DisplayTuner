@@ -15,6 +15,7 @@ mkdir -p "$STAGE/Contents/MacOS" "$STAGE/Contents/Resources"
 cp "$BIN_DIR/DisplayTuner" "$STAGE/Contents/MacOS/DisplayTuner"
 cp Resources/Info.plist "$STAGE/Contents/Info.plist"
 cp Resources/AppIcon.icns "$STAGE/Contents/Resources/AppIcon.icns"
+cp ../LICENSE "$STAGE/Contents/Resources/LICENSE"
 codesign --force --sign - "$STAGE"
 codesign --verify --deep --strict "$STAGE"
 if [[ "$MODE" == --stage ]]; then echo "Built: $STAGE"; exit 0; fi
