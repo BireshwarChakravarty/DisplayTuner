@@ -17,17 +17,22 @@ struct MenuBarView: View {
                 }
             } label: {
                 Label(useCase.title, systemImage: useCase.symbol)
-            }
+            }.disabled(!model.canChange)
         }
         Divider()
         Button("Undo Last Apply") {
             Task { await model.undoLastApply() }
         }
-        .disabled(model.lastSnapshot == nil)
+        .disabled(model.lastSnapshot == nil || !model.canChange)
         Button("Open Display Tuner") { showWindow() }
             .keyboardShortcut(",")
         Divider()
-        Button("Quit Display Tuner") { NSApp.terminate(nil) }
+        Button("Quit Display Tuner") {
+            Task {
+                if model.confirmation != nil { await model.revertUnconfirmed() }
+                NSApp.terminate(nil)
+            }
+        }.disabled(model.isBusy)
             .keyboardShortcut("q")
     }
 
