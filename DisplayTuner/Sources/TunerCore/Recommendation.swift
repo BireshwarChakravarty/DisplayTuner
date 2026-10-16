@@ -100,6 +100,18 @@ public struct PlannedChange: Hashable, Sendable, Identifiable {
     /// Applies to every screen (Night Shift), not just this one.
     public var isGlobal: Bool = false
     public var isExperimental: Bool = false
+
+    public init(id: String, change: Change, title: String, detail: String, why: String, onByDefault: Bool,
+                isGlobal: Bool = false, isExperimental: Bool = false) {
+        self.id = id
+        self.change = change
+        self.title = title
+        self.detail = detail
+        self.why = why
+        self.onByDefault = onByDefault
+        self.isGlobal = isGlobal
+        self.isExperimental = isExperimental
+    }
 }
 
 /// Something the person has to do: in the monitor's menu, in System Settings,
