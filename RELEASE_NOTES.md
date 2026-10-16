@@ -1,4 +1,24 @@
-# Next release — macOS 26 and later
+# Next release — native redesign, monitor capabilities and automatic presets
+
+## A native Mac app
+- Redesigned in the style of System Settings: a standard sidebar with your displays and a Library (presets, test patterns, activity), and one page per display in task order: what you're doing, the changes, the steps for the monitor, System Settings, cable and apps, then adjustments and display details.
+- Apply and Undo are always visible at the bottom, with a count of the selected changes. Identify, Save as Preset, Restore and Diagnostics are in the ⋯ menu.
+- When a display runs slower than it can at the same size (for example 60 Hz instead of 160 Hz), the page says so at the top with a one-click fix.
+- Follows the system appearance and accent colour. The illustration, glow backdrop and marketing copy are gone.
+
+## Asks the monitor what it supports
+- Reads each monitor's DDC/CI capabilities list. If the monitor lists sRGB among its colour presets, the editing presets switch its picture mode for you and check the result, and the gaming presets return it to the preset it had before. Values the monitor doesn't list are never offered.
+- What the monitor reports is shown under About this display and in diagnostics.
+
+## Automatic presets (optional)
+- Settings → Automatic presets: games (by App Store category or Steam library) and photo and video editors (Lightroom, Photoshop, Capture One, Final Cut Pro, DaVinci Resolve and others) switch every external screen's preset when they come to the front. Leaving them returns to your own preset.
+- Resolution and refresh rate never change automatically. If the colour profile changes but the monitor's picture mode can't be switched over DDC, a card on that screen says which setting to change.
+
+## Also
+- Fix the MCCS code used for "restore factory brightness/contrast" (0x05).
+- CI captures screenshots of the demo workspace for design review.
+
+## macOS 26 and later
 
 - Require macOS 26.0 or later in the Swift package deployment target, app bundle and compiled executable.
 - Use native Liquid Glass directly; remove the compatibility fallback for older macOS versions.

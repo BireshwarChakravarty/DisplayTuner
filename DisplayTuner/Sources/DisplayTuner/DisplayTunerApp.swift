@@ -15,6 +15,7 @@ struct DisplayTunerApp: App {
                 .background(WindowCaptureBridge())
         }
         .defaultSize(width: 1120, height: 860)
+        .defaultLaunchBehavior(.presented) // always open the window at launch, even after an unclean quit
         .commands {
             CommandGroup(after: .newItem) {
                 Button("Rescan Displays") { model.refresh(rescan: true) }.keyboardShortcut("r").disabled(!model.canChange)

@@ -65,9 +65,8 @@ struct DisplayDetailView: View {
             HStack(spacing: 14) {
                 Image(systemName: display.isBuiltIn ? "laptopcomputer" : display.mirrorOf != nil ? "rectangle.on.rectangle" : "display")
                     .font(.system(size: 32, weight: .light)).foregroundStyle(.tint).frame(width: 48)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(display.name).font(.title2.weight(.semibold))
-                    Text(specLine).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(specLine).font(.headline)
                     HStack(spacing: 10) {
                         if rec.profile != nil {
                             Label("Researched model", systemImage: "checkmark.seal.fill").foregroundStyle(.green)

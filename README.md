@@ -8,7 +8,10 @@
 
 ## A studio for every screen
 
-See connected displays and their capabilities, choose an activity, inspect the suggested changes, and apply them with a saved rollback state. Native Liquid Glass controls sit above a readable display workspace. Display Tuner requires macOS 26 or later.
+Pick a display, choose what you're doing, review exactly what will change, and apply it, with your previous settings saved for Undo. It looks and works like a built-in Mac app. Display Tuner requires macOS 26 or later.
+
+- **Asks your monitor what it supports** over DDC/CI, so hardware changes are only offered when the monitor lists them; on monitors that list an sRGB preset, editing switches it for you.
+- **Automatic presets (optional):** games and photo/video editors switch your screens' preset when they come to the front.
 
 - **Five activities:** Competitive Gaming, Immersive Gaming, Photo Editing, Video Editing and Everyday.
 - **Fine-tune:** stage hardware brightness, contrast, resolution and refresh adjustments.

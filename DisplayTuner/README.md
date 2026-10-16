@@ -1,4 +1,4 @@
-> **Version 2.0:** See the [main README](../README.md) for the new Display Studio, saved presets, manual controls, test patterns, accessibility and release instructions. Calibration protection now also preserves hardware levels and monitor picture mode.
+> **Version 2.0 and later:** See the [main README](../README.md) for the app's features, saved presets, test patterns, automatic presets and release instructions. Calibration protection also preserves hardware levels and monitor picture mode.
 
 # Display Tuner
 
