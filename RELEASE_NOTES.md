@@ -1,4 +1,4 @@
-# Display Tuner 2.1.0 — native redesign, monitor capabilities and automatic presets
+# Display Tuner 1.0 — native redesign, monitor capabilities and automatic presets
 
 ## A native Mac app
 - Redesigned in the style of System Settings: a standard sidebar with your displays and a Library (presets, test patterns, activity), and one page per display in task order: what you're doing, the changes, the steps for the monitor, System Settings, cable and apps, then adjustments and display details.
