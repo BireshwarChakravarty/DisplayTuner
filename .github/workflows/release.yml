@@ -41,6 +41,7 @@ jobs:
             "DisplayTuner/dist/DisplayTuner-$VERSION-macOS.zip" \
             DisplayTuner/dist/SHA256SUMS.txt \
             DisplayTuner/dist/DisplayTuner-Icon.png \
+            LICENSE \
             --target "$GITHUB_SHA" \
             --title "Display Tuner $VERSION — Your display, refined" \
             --notes-file RELEASE_NOTES.md
