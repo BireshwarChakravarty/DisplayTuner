@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "DisplayTuner",
     platforms: [
-        .macOS(.v14)
+        .macOS("26.0")
     ],
     targets: [
         // Research database, colour maths and the recommendation engine.

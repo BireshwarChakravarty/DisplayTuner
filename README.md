@@ -8,7 +8,7 @@
 
 ## A studio for every screen
 
-See connected displays and their capabilities, choose an activity, inspect the suggested changes, and apply them with a saved rollback state. Modern Liquid Glass controls on macOS 26+ sit above a readable display workspace; macOS 14–15 use native translucent materials.
+See connected displays and their capabilities, choose an activity, inspect the suggested changes, and apply them with a saved rollback state. Native Liquid Glass controls sit above a readable display workspace. Display Tuner requires macOS 26 or later.
 
 - **Five activities:** Competitive Gaming, Immersive Gaming, Photo Editing, Video Editing and Everyday.
 - **Fine-tune:** stage hardware brightness, contrast, resolution and refresh adjustments.
@@ -20,7 +20,7 @@ See connected displays and their capabilities, choose an activity, inspect the s
 
 ## Install
 
-Download the ZIP from [Releases](https://github.com/BireshwarChakravarty/DisplayTuner/releases), unzip, and drag **Display Tuner.app** to Applications. Requires Apple Silicon and macOS 14 or later. Liquid Glass requires macOS 26+.
+Download the ZIP from [Releases](https://github.com/BireshwarChakravarty/DisplayTuner/releases), unzip, and drag **Display Tuner.app** to Applications. Requires Apple Silicon and macOS 26 or later.
 
 The community build is ad-hoc signed and not notarized. macOS may ask you to approve opening it under **System Settings → Privacy & Security**. Verify the download using the supplied SHA256SUMS.txt.
 
@@ -32,7 +32,7 @@ bash make-app.sh --package  # build a signed app and ZIP without installing
 bash make-app.sh --install  # explicitly install and open the app
 ```
 
-Build with an Xcode 26 SDK or later for Liquid Glass. The deployment target remains macOS 14. The packaging script reconstructs the app icon from its versioned base64 PNG source, which allows lossless asset publishing through the text-only repository connector.
+Build with an Xcode 26 SDK or later for Liquid Glass. The deployment target is macOS 26. The packaging script reconstructs the app icon from its versioned base64 PNG source, which allows lossless asset publishing through the text-only repository connector.
 
 ```sh
 swift test --package-path DisplayTuner

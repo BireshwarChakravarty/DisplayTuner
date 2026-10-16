@@ -85,7 +85,7 @@ struct StudioSettingsView: View {
         Form {
             Section("Appearance") {
                 Picker("Theme", selection: $appearance) { Text("System").tag("system"); Text("Dark studio").tag("dark"); Text("Light studio").tag("light") }
-                Text("Liquid Glass is available on macOS 26 and later. Earlier versions use native translucent materials. Reduce Transparency is respected.").font(.caption).foregroundStyle(.secondary)
+                Text("Display Tuner requires macOS 26 or later and uses native Liquid Glass. Reduce Transparency is respected.").font(.caption).foregroundStyle(.secondary)
             }
             Section("Startup") {
                 Toggle("Open Display Tuner at login", isOn: Binding(get: { loginEnabled }, set: { value in
