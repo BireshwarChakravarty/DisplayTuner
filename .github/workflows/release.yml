@@ -31,7 +31,7 @@ jobs:
           gh release create v2.0.0 \
             DisplayTuner/dist/DisplayTuner-2.0.0-macOS.zip \
             DisplayTuner/dist/SHA256SUMS.txt \
-            DisplayTuner/Resources/AppIcon.png#DisplayTuner-Icon.png \
+            DisplayTuner/dist/DisplayTuner-Icon.png \
             --target "$GITHUB_SHA" \
             --title "Display Tuner 2.0 — Your display, refined" \
             --notes-file RELEASE_NOTES.md
