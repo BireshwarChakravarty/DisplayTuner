@@ -40,7 +40,7 @@ struct GamutDiagram: View {
                     path.closeSubpath()
                 }
                 context.fill(locus, with: .conicGradient(
-                    Gradient(colors: [.red, .yellow, .green, .cyan, .blue, .purple, .red].map { $0.opacity(0.28) }),
+                    Gradient(colors: ([Color.red, .yellow, .green, .cyan, .blue, .purple, .red] as [Color]).map { $0.opacity(0.28) }),
                     center: point(0.33, 0.33), angle: .degrees(-20)))
                 context.stroke(locus, with: .color(.secondary.opacity(0.6)), lineWidth: 1)
 
