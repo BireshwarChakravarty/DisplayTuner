@@ -25,7 +25,13 @@ struct PatternLibraryView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 PageHeading(eyebrow: "See the difference", title: "Trust your eyes. Then verify.", subtitle: "Six visual checks for sharpness, clipping, gradients and colour consistency.")
-                HStack { Label("Target display", systemImage: "display"); Picker("Target display", selection: $model.selectedID) { ForEach(model.displays.filter { $0.mirrorOf == nil }) { Text($0.name).tag(Optional($0.id)) } }.labelsHidden().frame(width: 260) }.font(.callout)
+                HStack(spacing: 12) {
+                    Label("Target display", systemImage: "display").foregroundStyle(.secondary)
+                    // A plain pop-up picker renders dark-on-dark over the studio backdrop; segments stay legible.
+                    Picker("Target display", selection: $model.selectedID) {
+                        ForEach(model.displays.filter { $0.mirrorOf == nil }) { Text($0.name).tag(Optional($0.id)) }
+                    }.pickerStyle(.segmented).labelsHidden().fixedSize()
+                }.font(.callout)
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 260))], spacing: 16) {
                     ForEach(TestPattern.allCases) { pattern in
                         VStack(alignment: .leading, spacing: 14) {

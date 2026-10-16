@@ -14,16 +14,16 @@ struct DisplayDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                header
+            VStack(alignment: .leading, spacing: 20) {
                 hero
+                if let insight { insightBanner(insight) }
                 metrics
                 HStack {
                     Picker("Section", selection: $tab) {
                         Text("Overview").tag("Overview")
                         Text("Fine-tune").tag("Fine-tune")
                         Text("Research").tag("Research")
-                    }.pickerStyle(.segmented).labelsHidden().frame(width: 320)
+                    }.pickerStyle(.segmented).labelsHidden().fixedSize()
                     Spacer()
                     if display.hasCalibration { Label("Calibration protected", systemImage: "lock.shield.fill").font(.caption).foregroundStyle(Color.studioCyan) }
                 }
@@ -39,9 +39,8 @@ struct DisplayDetailView: View {
                 }
                 if !model.results.isEmpty { resultList }
                 restoreBar
-                Text("Designed for your eyes. Grounded in your display’s capabilities.")
-                    .font(.system(size: 10)).foregroundStyle(.tertiary).frame(maxWidth: .infinity).padding(.top, 8)
-            }.padding(28).frame(maxWidth: 1100).frame(maxWidth: .infinity)
+            }.padding(.horizontal, 28).padding(.top, 22).padding(.bottom, 110) // clear of the floating Apply bar
+                .frame(maxWidth: 1100).frame(maxWidth: .infinity)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { applyDock }
         .alert("Save a studio preset", isPresented: $savingPreset) {
@@ -52,24 +51,51 @@ struct DisplayDetailView: View {
         .onChange(of: display.id) { _, _ in tab = "Overview" }
     }
 
-    private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 7) {
-                Eyebrow(text: "Your display, at its best")
-                Text("Make every pixel count.").font(.system(size: 29, weight: .semibold, design: .rounded)).tracking(-0.8)
-            }
-            Spacer()
-            Button { savingPreset = true } label: { Label("Save preset", systemImage: "plus") }
-                .buttonStyle(StudioButton()).disabled(model.isBusy || model.confirmation != nil || model.isDemo)
+    /// The fastest mode at the current desktop size, when the display is running slower.
+    private var fasterMode: DisplayMode? {
+        guard display.mirrorOf == nil, let current = display.currentMode,
+              let best = ModePicker.bestMode(for: current.layout, in: display.modes, policy: .highest),
+              best.refreshRate > current.refreshRate + 1 else { return nil }
+        return best
+    }
+
+    private struct Insight { var text: String; var action: String?; var mode: DisplayMode? }
+
+    private var insight: Insight? {
+        if let faster = fasterMode, let current = display.currentMode {
+            return Insight(text: "Running at \(current.refreshLabel). This display does \(faster.refreshLabel) at the same size: smoother motion and lower input lag at no cost to sharpness.",
+                           action: "Use \(faster.refreshLabel)", mode: faster)
         }
+        if let master = display.mirrorOf, let source = model.displays.first(where: { $0.id == master }) {
+            return Insight(text: "Mirroring \(source.name). Its resolution, refresh rate and colour follow that screen; set brightness with this display's own buttons.", action: nil, mode: nil)
+        }
+        return nil
+    }
+
+    private func insightBanner(_ insight: Insight) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: insight.mode != nil ? "bolt.fill" : "rectangle.on.rectangle").font(.system(size: 15)).foregroundStyle(insight.mode != nil ? Color.orange : Color.studioCyan)
+            Text(insight.text).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            if let action = insight.action, let mode = insight.mode {
+                Button(action) {
+                    model.chooseMode(mode, for: display)
+                    tab = "Overview"
+                }.buttonStyle(StudioButton()).disabled(!model.canChange)
+            }
+        }.padding(.horizontal, 18).padding(.vertical, 14)
+            .background((insight.mode != nil ? Color.orange : Color.studioCyan).opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder((insight.mode != nil ? Color.orange : Color.studioCyan).opacity(0.25)))
     }
 
     private var hero: some View {
-        HStack(spacing: 30) {
-            MonitorPortrait(display: display).frame(maxWidth: .infinity).frame(height: 205)
-            VStack(alignment: .leading, spacing: 13) {
+        HStack(spacing: 26) {
+            MonitorPortrait(display: display).scaleEffect(0.72).frame(width: 220, height: 150)
+            VStack(alignment: .leading, spacing: 11) {
                 HStack(spacing: 7) {
                     StatusPill(text: display.mirrorOf != nil ? "MIRRORED" : display.isBuiltIn ? "BUILT-IN" : "EXTERNAL")
+                    StatusPill(text: model.useCase(for: display.id).title.uppercased(), color: .studioViolet)
+                    if let auto = model.autoState { StatusPill(text: "AUTO · \(auto.appName.uppercased())", color: .orange) }
                     if rec.profile != nil { Image(systemName: "checkmark.seal.fill").foregroundStyle(Color.studioCyan).help("Model matched in research database") }
                 }
                 Text(display.name).font(.system(size: 22, weight: .semibold)).tracking(-0.5).fixedSize(horizontal: false, vertical: true)
@@ -80,9 +106,11 @@ struct DisplayDetailView: View {
                 HStack(spacing: 16) {
                     Button { model.identify(display) } label: { Label("Identify", systemImage: "scope") }.buttonStyle(.plain).disabled(model.isDemo)
                     Button { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Displays-Settings.extension")!) } label: { Label("Display settings", systemImage: "arrow.up.right") }.buttonStyle(.plain)
+                    Button { savingPreset = true } label: { Label("Save preset", systemImage: "plus") }.buttonStyle(.plain)
+                        .disabled(model.isBusy || model.confirmation != nil || model.isDemo)
                 }.font(.system(size: 11, weight: .medium)).foregroundStyle(Color.studioCyan).padding(.top, 3)
             }.frame(maxWidth: .infinity, alignment: .leading)
-        }.padding(24)
+        }.padding(.horizontal, 22).padding(.vertical, 16)
             .background(LinearGradient(colors: [Color.studioCyan.opacity(0.065), Color.studioViolet.opacity(0.045), Color.primary.opacity(0.015)], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 24))
             .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(LinearGradient(colors: [.studioCyan.opacity(0.2), .white.opacity(0.04), .studioViolet.opacity(0.12)], startPoint: .topLeading, endPoint: .bottomTrailing)))
     }
@@ -90,9 +118,12 @@ struct DisplayDetailView: View {
     private var metrics: some View {
         HStack(spacing: 12) {
             metric("RESOLUTION", display.nativePixels.map { "\($0.width) × \($0.height)" } ?? "Unknown", "display", "Largest reported mode")
-            metric("REFRESH RATE", display.currentMode?.refreshLabel ?? "Unknown", "waveform.path", "Up to \(Int(display.maxRefresh)) Hz available")
-            metric("COLOUR GAMUT", display.primaries.map { "\(Int(($0.coverage(of: .displayP3) * 100).rounded()))% P3" } ?? "Unknown", "circle.hexagongrid", "Estimated from active ICC profile")
-            metric("HARDWARE", display.ddc.isAvailable ? "Connected" : ddcLabel, "slider.horizontal.3", display.ddc.isAvailable ? "DDC/CI controls available" : "Use monitor buttons")
+            metric("REFRESH RATE", display.currentMode?.refreshLabel ?? "Unknown", "waveform.path",
+                   fasterMode.map { "\($0.refreshLabel) available at this size" } ?? "Fastest at this size", warn: fasterMode != nil)
+            metric("COLOUR GAMUT", display.primaries.map { "\(Int(($0.coverage(of: .displayP3) * 100).rounded()))% P3" } ?? "Unknown", "circle.hexagongrid",
+                   display.primaries.map { "\(Int(($0.coverage(of: .sRGB) * 100).rounded()))% sRGB · from the active profile" } ?? "From the active ICC profile")
+            metric("HARDWARE", display.ddc.isAvailable ? "Connected" : ddcLabel, "slider.horizontal.3",
+                   display.capabilities.map { "\($0.describedControls.count) controls reported over DDC/CI" } ?? (display.ddc.isAvailable ? "DDC/CI controls available" : "Use monitor buttons"))
         }
     }
 
@@ -100,12 +131,12 @@ struct DisplayDetailView: View {
         switch display.ddc { case .probing, .unknown: return "Scanning…"; case .unavailable: return "Manual"; case .available: return "Connected" }
     }
 
-    private func metric(_ title: String, _ value: String, _ icon: String, _ detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack { Eyebrow(text: title); Spacer(minLength: 0); Image(systemName: icon).foregroundStyle(Color.studioCyan.opacity(0.65)).font(.system(size: 12)) }
-            Text(value).font(.system(size: 17, weight: .semibold, design: .rounded)).lineLimit(1).minimumScaleFactor(0.7)
-            Text(detail).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.7)
-        }.padding(15).frame(maxWidth: .infinity, alignment: .leading)
+    private func metric(_ title: String, _ value: String, _ icon: String, _ detail: String, warn: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack { Eyebrow(text: title); Spacer(minLength: 0); Image(systemName: icon).foregroundStyle((warn ? Color.orange : Color.studioCyan).opacity(0.75)).font(.system(size: 12)) }
+            Text(value).font(.system(size: 17, weight: .semibold, design: .rounded)).foregroundStyle(warn ? Color.orange : Color.primary).lineLimit(1).minimumScaleFactor(0.7)
+            Text(detail).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.7)
+        }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 15))
             .overlay(RoundedRectangle(cornerRadius: 15).strokeBorder(.primary.opacity(0.05)))
     }
@@ -121,7 +152,7 @@ struct DisplayDetailView: View {
                 Text("ROOM").font(.system(size: 8, weight: .medium)).tracking(1).foregroundStyle(.secondary)
                 Picker("Room lighting", selection: $model.lighting) {
                     ForEach(RoomLighting.allCases) { Text($0.title).tag($0) }
-                }.labelsHidden().frame(width: 110).disabled(model.isBusy || model.confirmation != nil)
+                }.pickerStyle(.segmented).labelsHidden().fixedSize().disabled(model.isBusy || model.confirmation != nil)
             }
             HStack(spacing: 9) {
                 ForEach(UseCase.allCases) { useCase in

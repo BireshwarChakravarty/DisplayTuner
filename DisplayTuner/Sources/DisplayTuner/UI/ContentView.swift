@@ -100,7 +100,7 @@ struct ContentView: View {
                     .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }.padding(14).background(Color.studioCyan.opacity(0.04), in: RoundedRectangle(cornerRadius: 12)).padding(14)
             HStack {
-                Text("VERSION 2.0").font(.system(size: 8, weight: .medium)).tracking(1.5).foregroundStyle(.tertiary)
+                Text("VERSION \(AppVersion.current)").font(.system(size: 8, weight: .medium)).tracking(1.5).foregroundStyle(.tertiary)
                 Spacer()
                 Button { openSettings() } label: { Image(systemName: "gearshape").font(.system(size: 13)) }.buttonStyle(.plain).help("Settings")
             }.padding(.horizontal, 22).padding(.bottom, 18)

@@ -10,10 +10,12 @@ shoot() {
     defaults write app.displaytuner.DisplayTuner appearance "$appearance"
     "$BIN" --demo "$@" --screenshot "$PWD/$OUT/$name.png" &
     local pid=$!
-    sleep 8
+    sleep 10
     kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
     [ -f "$OUT/$name.png" ] && echo "captured $name" || echo "missing $name"
 }
+# Warm-up: the first launch on a fresh runner is slow (font and icon caches).
+"$BIN" --demo & warm=$!; sleep 12; kill "$warm" 2>/dev/null; wait "$warm" 2>/dev/null
 shoot overview-dark dark
 shoot overview-light light
 shoot finetune-dark dark --controls
