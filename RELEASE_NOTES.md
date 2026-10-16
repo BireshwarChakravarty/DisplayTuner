@@ -1,3 +1,14 @@
+# Next release — macOS 26 and later
+
+- Require macOS 26.0 or later in the Swift package deployment target, app bundle and compiled executable.
+- Use native Liquid Glass directly; remove the compatibility fallback for older macOS versions.
+- Preserve the opaque accessibility surface when Reduce Transparency is enabled.
+- Update Settings and installation documentation to match the new requirement.
+
+The previously published v2.0.2 release below retains its original system requirements.
+
+---
+
 # Display Tuner 2.0.2 — Your display, refined
 
 Version 2.0.2 includes the MIT license in the source, app bundle and release downloads. It also includes the demo preset protection from 2.0.1.
