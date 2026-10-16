@@ -12,7 +12,8 @@ Research-based display settings for gaming and editing on Apple Silicon Macs. Pi
 - **Asks your monitor what it supports** over DDC/CI. On monitors that list an sRGB preset, editing switches the monitor's picture mode for you and checks the result; values the monitor doesn't list are never offered.
 - **Automatic presets (optional):** games and photo/video editors switch your screens' preset when they come to the front. Resolution and refresh rate never change automatically.
 - **Safe by design:** settings are saved before every change; resolution changes revert after 15 seconds unless you keep them; calibration profiles are never touched; Undo and Restore Originals are always available.
-- **Also:** saved presets, full-screen test patterns, an activity log, diagnostics export, a menu-bar popover with one-click presets, light and dark appearance.
+- **Menu bar panel, Control Center style:** your screens with their mode and preset, a one-tap switch to 160 Hz, round preset buttons, a live brightness slider that moves the monitor's backlight with a nits readout, and Night Shift, room lighting and auto-preset tiles.
+- **Also:** saved presets, full-screen test patterns, an activity log, diagnostics export, light and dark appearance.
 
 ## Install
 

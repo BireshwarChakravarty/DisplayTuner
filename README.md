@@ -17,7 +17,7 @@ Pick a display, choose what you're doing, review exactly what will change, and a
 - **Asks your monitor what it supports** over DDC/CI, so hardware changes are only offered when the monitor lists them. On monitors that list an sRGB preset, editing switches it for you.
 - **Automatic presets (optional):** games and photo/video editors switch your screens' preset when they come to the front.
 - **Stay in control:** Undo, Restore Originals, a keep-or-revert countdown for resolution changes, calibration protection and recovery from interrupted changes.
-- **Also:** saved presets, full-screen test patterns, a menu-bar popover, activity history and diagnostics export.
+- **Also:** saved presets, full-screen test patterns, a Control Center-style menu-bar panel (presets, live brightness, Night Shift), activity history and diagnostics export.
 
 ## Install
 
