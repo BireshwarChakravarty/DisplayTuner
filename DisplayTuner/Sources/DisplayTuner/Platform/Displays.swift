@@ -49,7 +49,8 @@ enum DisplayDetector {
                 profileName: icc.flatMap(ICCProfile.description(from:)) ?? (colorSpace.name as String?),
                 customProfilePath: customProfile?.path,
                 edrHeadroom: Double(screen?.maximumPotentialExtendedDynamicRangeColorComponentValue ?? 1),
-                ddc: CGDisplayIsBuiltin(id) != 0 ? .unavailable : .unknown)
+                ddc: CGDisplayIsBuiltin(id) != 0 ? .unavailable : .unknown,
+                persistentID: owned(CGDisplayCreateUUIDFromDisplayID(id)).map { CFUUIDCreateString(nil, $0) as String })
         }
     }
 }
