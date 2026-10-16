@@ -63,6 +63,10 @@ final class AppModel: ObservableObject {
     var hintPanels: [NSPanel] = []
     private var screenObserver: NSObjectProtocol?
     private var confirmTask: Task<Void, Never>?
+    /// Live brightness from the menu bar: the latest value asked for per
+    /// display, and which displays have a write in flight.
+    private var liveTarget: [UInt32: UInt16] = [:]
+    private var liveWriting: Set<UInt32> = []
 
     init() {
         lighting = RoomLighting(rawValue: UserDefaults.standard.string(forKey: "lighting") ?? "") ?? .normal
@@ -250,11 +254,64 @@ final class AppModel: ObservableObject {
     // MARK: Applying
 
     /// One preset on every external screen (from the menu bar).
-    func quickApply(_ useCase: UseCase) async {
-        guard canChange else { return }
+    @discardableResult
+    func quickApply(_ useCase: UseCase) async -> [ApplyResult] {
+        guard canChange || isDemo else { return [] }
         let targets = displays.filter { !$0.isBuiltIn }
+        if isDemo {
+            for display in targets { useCases[display.id] = useCase }
+            return []
+        }
         for display in targets { setUseCase(useCase, for: display.id) }
-        await apply(to: targets.map(\.id))
+        let applied = await apply(to: targets.map(\.id))
+        showMonitorMenuHints(after: applied, on: targets)
+        return applied
+    }
+
+    // MARK: Live controls (menu bar)
+
+    /// Whether the menu-bar slider can move this monitor's backlight.
+    func canSetBrightnessLive(_ display: DisplayFacts) -> Bool {
+        !isBusy && confirmation == nil && !recoveryRequired && display.mirrorOf == nil
+            && !display.hasCalibration && display.ddc.values[VCP.brightness] != nil
+    }
+
+    /// Move a monitor's backlight while a slider drags. One write is in
+    /// flight per display; only the latest value is sent after it.
+    func setBrightnessLive(_ percent: Double, for display: DisplayFacts) {
+        guard canSetBrightnessLive(display), let current = display.ddc.values[VCP.brightness] else { return }
+        let raw = UInt16((min(max(percent, 0), 100) / 100 * Double(current.max)).rounded())
+        guard raw != current.current else { return }
+        var values = display.ddc.values
+        values[VCP.brightness] = VCPValue(current: raw, max: current.max)
+        if !isDemo { ddcStatus[display.key] = .available(values) }
+        update(display.key) { $0.ddc = .available(values) }
+        manualBrightness[display.id] = nil
+        guard !isDemo else { return }
+        liveTarget[display.id] = raw
+        guard !liveWriting.contains(display.id) else { return }
+        liveWriting.insert(display.id)
+        pumpLive(DisplayIdentity(id: display.id, name: display.name))
+    }
+
+    private func pumpLive(_ identity: DisplayIdentity) {
+        guard let raw = liveTarget.removeValue(forKey: identity.id) else {
+            liveWriting.remove(identity.id)
+            return
+        }
+        let ddc = self.ddc
+        ddcQueue.async { [weak self] in
+            _ = ddc.write(VCP.brightness, value: raw, for: identity)
+            usleep(40_000) // monitors drop commands sent back to back
+            Task { @MainActor [weak self] in self?.pumpLive(identity) }
+        }
+    }
+
+    func setNightShiftNow(_ on: Bool) {
+        guard !isBusy, confirmation == nil else { return }
+        if isDemo { nightShiftEnabled = on; return }
+        nightShift.setEnabled(on)
+        nightShiftEnabled = nightShift.isEnabled()
     }
 
     /// Apply each display's selected changes. `automatic` (app-based

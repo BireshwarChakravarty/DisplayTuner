@@ -28,6 +28,8 @@ shoot() {
 }
 # Warm-up: the first launches on a fresh runner don't always open a window.
 for _ in 1 2; do "$BIN" --demo & warm=$!; sleep 10; kill "$warm" 2>/dev/null; wait "$warm" 2>/dev/null; done
+shoot popover-dark dark --popover
+shoot popover-light light --popover
 shoot patterns dark --patterns
 shoot presets dark --presets
 shoot activity dark --activity

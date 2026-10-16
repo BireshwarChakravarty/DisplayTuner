@@ -60,6 +60,14 @@ struct ContentView: View {
             }
         } detail: {
             Group {
+                if model.isDemo && ProcessInfo.processInfo.arguments.contains("--popover") {
+                    // Screenshot preview of the menu-bar panel.
+                    MenuBarView()
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .shadow(color: .black.opacity(0.25), radius: 24, y: 8)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(LinearGradient(colors: [.indigo.opacity(0.6), .teal.opacity(0.5)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                } else {
                 switch model.section {
                 case .studio:
                     if let display = model.selectedDisplay {
@@ -71,6 +79,7 @@ struct ContentView: View {
                 case .presets: SavedPresetsView()
                 case .patterns: PatternLibraryView()
                 case .activity: ActivityView()
+                }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
