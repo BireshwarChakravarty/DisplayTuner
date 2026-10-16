@@ -80,9 +80,9 @@ final class AppModel: ObservableObject {
                 // QA: report where windows ended up (stdout).
                 DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
                     for window in NSApp.windows {
-                        print("window '\(window.title)' frame \(window.frame) visible \(window.isVisible) onScreen \(window.isOnActiveSpace) screen \(window.screen?.frame ?? .zero)")
+                        FileHandle.standardError.write(Data("window '\(window.title)' frame \(window.frame) visible \(window.isVisible) onScreen \(window.isOnActiveSpace)\n".utf8))
                     }
-                    print("screens \(NSScreen.screens.map(\.frame))")
+                    FileHandle.standardError.write(Data("windows: \(NSApp.windows.count) screens \(NSScreen.screens.map(\.frame))\n".utf8))
                 }
             }
             if let index = arguments.firstIndex(of: "--usecase"), index + 1 < arguments.count,

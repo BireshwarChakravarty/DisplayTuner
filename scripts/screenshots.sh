@@ -17,6 +17,7 @@ shoot() {
         osascript -e 'tell application "System Events" to set frontmost of (first process whose unix id is '"$pid"') to true' 2>/dev/null
         sleep 1
         screencapture -x -o "$OUT/$name.png" 2>/dev/null
+        case "$name" in *photo*|*log*) echo "== sample $name"; sample "$pid" 1 2>/dev/null | grep -E "DisplayTuner|SwiftUI|AppKit" | head -40 ;; esac
         kill "$pid" 2>/dev/null
     else
         echo "exited early: $name"
