@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import TunerCore
 
  enum TestPattern: String, CaseIterable, Identifiable {
     case gradient = "Smooth gradient", grayscale = "Grayscale steps", black = "Shadow detail", white = "Highlight detail", grid = "Pixel grid", colours = "Colour bars"
@@ -54,7 +55,7 @@ struct PatternLibraryView: View {
         .toolbar {
             ToolbarItem {
                 Picker("Show on", selection: $model.selectedID) {
-                    ForEach(targets) { Text($0.name).tag(Optional($0.id)) }
+                    ForEach(targets) { display in Text(display.name).tag(Optional(display.id)) }
                 }
                 .help("The display to show patterns on")
             }
