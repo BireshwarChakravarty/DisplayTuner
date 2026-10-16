@@ -63,3 +63,7 @@ Demo displays are clearly labeled. Hardware writes, saved presets and full-scree
 Settings, presets and the last 100 operation results stay on your Mac. There is no analytics service or account requirement. DDC and Night Shift support depend on the hardware and private macOS APIs. Brightness and gamut figures are estimates, not calibration measurements. Calibrated displays keep their hardware levels and picture modes.
 
 Read the [release notes](RELEASE_NOTES.md) and [technical guide](DisplayTuner/README.md) for limits, sources and monitor-specific advice.
+
+## License
+
+[MIT](LICENSE) · Copyright © 2026 Bireshwar Chakravarty.
