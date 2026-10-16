@@ -8,13 +8,15 @@ mkdir -p "$OUT"
 shoot() {
     local name="$1" appearance="$2"; shift 2
     defaults write app.displaytuner.DisplayTuner appearance "$appearance"
-    "$BIN" --demo "$@" --screenshot "$PWD/$OUT/$name.png" &
+    "$BIN" --demo "$@" &
     local pid=$!
-    sleep 10
+    sleep 9
     if kill -0 "$pid" 2>/dev/null; then
-        # The in-app capture can't render some controls (disclosure groups);
-        # fall back to a screen capture while the window is up.
-        [ -f "$OUT/$name.png" ] || screencapture -x -o "$OUT/$name.png" 2>/dev/null
+        # A real screen capture: the in-app capture can't render system
+        # materials, vibrancy or some controls.
+        osascript -e 'tell application "System Events" to set frontmost of (first process whose unix id is '"$pid"') to true' 2>/dev/null
+        sleep 1
+        screencapture -x -o "$OUT/$name.png" 2>/dev/null
         kill "$pid" 2>/dev/null
     else
         echo "exited early: $name"
@@ -35,7 +37,7 @@ shoot display-photo-light light --usecase photoEditing
 defaults delete app.displaytuner.DisplayTuner appearance 2>/dev/null || true
 # Small previews in the log, for reviewers without artifact access.
 for f in "$OUT"/*.png; do
-    sips -Z 900 -s format jpeg -s formatOptions 55 "$f" --out "${f%.png}.jpg" >/dev/null 2>&1 || continue
+    sips -Z 1100 -s format jpeg -s formatOptions 55 "$f" --out "${f%.png}.jpg" >/dev/null 2>&1 || continue
     echo "::group::preview $(basename "${f%.png}")"
     base64 -i "${f%.png}.jpg" | tr -d '\n'; echo
     echo "::endgroup::"
