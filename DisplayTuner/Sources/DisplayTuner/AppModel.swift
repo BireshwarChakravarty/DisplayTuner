@@ -76,6 +76,15 @@ final class AppModel: ObservableObject {
             if arguments.contains("--patterns") { section = .patterns }
             if arguments.contains("--presets") { section = .presets }
             if arguments.contains("--activity") { section = .activity }
+            if arguments.contains("--log-windows") {
+                // QA: report where windows ended up (stdout).
+                DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
+                    for window in NSApp.windows {
+                        print("window '\(window.title)' frame \(window.frame) visible \(window.isVisible) onScreen \(window.isOnActiveSpace) screen \(window.screen?.frame ?? .zero)")
+                    }
+                    print("screens \(NSScreen.screens.map(\.frame))")
+                }
+            }
             if let index = arguments.firstIndex(of: "--usecase"), index + 1 < arguments.count,
                let useCase = UseCase(rawValue: arguments[index + 1]) {
                 for display in displays { useCases[display.id] = useCase }
