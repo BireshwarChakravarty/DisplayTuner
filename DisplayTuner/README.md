@@ -1,4 +1,4 @@
-> **Version 2.0 and later:** See the [main README](../README.md) for the app's features, saved presets, test patterns, automatic presets and release instructions. Calibration protection also preserves hardware levels and monitor picture mode.
+> **Version 1.0:** See the [main README](../README.md) for the app's features, saved presets, test patterns, automatic presets and release instructions. Calibration protection also preserves hardware levels and monitor picture mode.
 
 # Display Tuner
 

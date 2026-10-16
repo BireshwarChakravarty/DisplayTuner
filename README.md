@@ -1,25 +1,23 @@
 <div align="center">
-  <img src="https://github.com/BireshwarChakravarty/DisplayTuner/releases/download/v2.0.1/DisplayTuner-Icon.png" width="128" alt="Display Tuner icon" />
+  <img src="docs/icon.png" width="128" alt="Display Tuner icon" />
   <h1>Display Tuner</h1>
-  <p><strong>Your display, refined.</strong></p>
-  <p>A native Mac workspace for better display settings, clearer decisions and a more comfortable picture.</p>
-  <p><a href="https://github.com/BireshwarChakravarty/DisplayTuner/releases/latest">Download the latest release</a> · <a href="DisplayTuner/README.md">Technical guide & research</a></p>
+  <p><strong>Research-based display settings for gaming and editing on the Mac.</strong></p>
+  <p><a href="https://github.com/BireshwarChakravarty/DisplayTuner/releases/latest">Download Display Tuner 1.0</a> · <a href="DisplayTuner/README.md">Technical guide & research</a></p>
 </div>
 
-## A studio for every screen
+## What it does
 
-Pick a display, choose what you're doing, review exactly what will change, and apply it, with your previous settings saved for Undo. It looks and works like a built-in Mac app. Display Tuner requires macOS 26 or later.
+Pick a display, choose what you're doing, review exactly what will change, and apply it, with your previous settings saved for Undo. It looks and works like a built-in Mac app.
 
-- **Asks your monitor what it supports** over DDC/CI, so hardware changes are only offered when the monitor lists them; on monitors that list an sRGB preset, editing switches it for you.
+- **Five presets:** Competitive Gaming, Immersive Gaming, Photo Editing, Video Editing and Everyday. Each previews what it sets, for example "160 Hz · sRGB · 120 nits".
+- **See your display:** a colour-gamut chart against sRGB and P3, and readouts for refresh rate, desktop size, colour mode and brightness.
+- **Finds the free win:** if a screen runs slower than it can at the same resolution, it offers the fix in one click.
+- **Changes shown before → after,** each with its reason and source.
+- **A checklist for what only you can do:** monitor menu, System Settings, cable and app settings.
+- **Asks your monitor what it supports** over DDC/CI, so hardware changes are only offered when the monitor lists them. On monitors that list an sRGB preset, editing switches it for you.
 - **Automatic presets (optional):** games and photo/video editors switch your screens' preset when they come to the front.
-
-- **Five activities:** Competitive Gaming, Immersive Gaming, Photo Editing, Video Editing and Everyday.
-- **Fine-tune:** stage hardware brightness, contrast, resolution and refresh adjustments.
-- **Saved presets:** keep named setups for your own displays and review before applying them.
-- **Test patterns:** inspect gradients, grayscale, shadow detail, highlight detail, grid sharpness and colour bars full screen.
-- **Understand the advice:** sources, rationale, capability detection and manual monitor-menu steps.
-- **Stay in control:** Undo, original settings, confirmation countdowns, calibration protection and interrupted-change recovery.
-- **Mac conveniences:** menu-bar presets, display identification, activity history, diagnostics export, optional launch at login and appearance preferences.
+- **Stay in control:** Undo, Restore Originals, a keep-or-revert countdown for resolution changes, calibration protection and recovery from interrupted changes.
+- **Also:** saved presets, full-screen test patterns, a menu-bar popover, activity history and diagnostics export.
 
 ## Install
 
@@ -35,7 +33,7 @@ bash make-app.sh --package  # build a signed app and ZIP without installing
 bash make-app.sh --install  # explicitly install and open the app
 ```
 
-Build with an Xcode 26 SDK or later for Liquid Glass. The deployment target is macOS 26. The packaging script reconstructs the app icon from its versioned base64 PNG source, which allows lossless asset publishing through the text-only repository connector.
+Build with an Xcode 26 SDK or later. The deployment target is macOS 26. The app icon is drawn by `scripts/make-icon.py` (Python with Pillow and NumPy), stored as a versioned base64 PNG, and turned into `AppIcon.icns` by the packaging script.
 
 ```sh
 swift test --package-path DisplayTuner
