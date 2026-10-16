@@ -3,6 +3,7 @@ import TunerCore
 
 struct DisplayDetailView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.colorScheme) private var colorScheme
     let display: DisplayFacts
     @ViewState private var tab = ProcessInfo.processInfo.arguments.contains("--controls") ? "Fine-tune" : "Overview"
     @ViewState private var savingPreset = false
@@ -116,6 +117,7 @@ struct DisplayDetailView: View {
                     Text("Pick what you’re doing. We’ll take care of the details.").font(.system(size: 11)).foregroundStyle(.secondary)
                 }
                 Spacer()
+                Text("ROOM").font(.system(size: 8, weight: .medium)).tracking(1).foregroundStyle(.secondary)
                 Picker("Room lighting", selection: $model.lighting) {
                     ForEach(RoomLighting.allCases) { Text($0.title).tag($0) }
                 }.labelsHidden().frame(width: 110).disabled(model.isBusy || model.confirmation != nil)
@@ -270,13 +272,16 @@ struct DisplayDetailView: View {
         }.buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(.secondary).padding(.top, 4)
     }
 
+    private var dockInk: Color { colorScheme == .dark ? .white : .black }
+    private var dockFill: Color { colorScheme == .dark ? Color(red: 0.075, green: 0.09, blue: 0.12) : .white }
+
     private var applyDock: some View {
         StudioGlassGroup {
             HStack(spacing: 16) {
                 Image(systemName: "shield.lefthalf.filled").font(.system(size: 18)).foregroundStyle(Color.studioCyan)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(model.isDemo ? "Explore your next display setup" : model.isBusy ? "Tuning your display…" : "Ready when you are.").font(.system(size: 12, weight: .semibold))
-                    Text(model.isDemo ? "Demo workspace · no hardware changes" : "Original settings saved before every change.").font(.system(size: 10)).foregroundStyle(.secondary)
+                    Text(model.isDemo ? "Explore your next display setup" : model.isBusy ? "Tuning your display…" : "Ready when you are.").font(.system(size: 12, weight: .semibold)).foregroundStyle(dockInk)
+                    Text(model.isDemo ? "Demo workspace · no hardware changes" : "Original settings saved before every change.").font(.system(size: 10)).foregroundStyle(dockInk.opacity(0.65))
                 }
                 Spacer()
                 if model.isBusy { ProgressView().controlSize(.small) }
@@ -289,7 +294,7 @@ struct DisplayDetailView: View {
                     .buttonStyle(StudioButton(prominent: true))
                     .disabled(model.recoveryRequired ? model.isBusy : (!model.canChange || !changes.contains { model.isOn($0, for: display) }))
                     .keyboardShortcut(.return, modifiers: .command)
-            }.padding(15).background(Color(nsColor: .windowBackgroundColor).opacity(0.85), in: RoundedRectangle(cornerRadius: 22)).modifier(StudioGlass(radius: 22)).padding(.horizontal, 28).padding(.bottom, 18).padding(.top, 8)
+            }.padding(15).background(dockFill.opacity(0.96), in: RoundedRectangle(cornerRadius: 22)).modifier(StudioGlass(radius: 22)).padding(.horizontal, 28).padding(.bottom, 18).padding(.top, 8)
         }
     }
 }
