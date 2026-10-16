@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://github.com/BireshwarChakravarty/DisplayTuner/releases/download/v2.0.0/DisplayTuner-Icon.png" width="128" alt="Display Tuner icon" />
+  <img src="https://github.com/BireshwarChakravarty/DisplayTuner/releases/download/v2.0.1/DisplayTuner-Icon.png" width="128" alt="Display Tuner icon" />
   <h1>Display Tuner</h1>
   <p><strong>Your display, refined.</strong></p>
   <p>A native Mac workspace for better display settings, clearer decisions and a more comfortable picture.</p>
