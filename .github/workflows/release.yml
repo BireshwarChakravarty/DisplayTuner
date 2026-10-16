@@ -1,0 +1,37 @@
+name: Publish Display Tuner
+on:
+  push:
+    branches: ["claude/lucid-bell-7thkev"]
+    paths: ["release.json"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: display-tuner-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate version
+        run: python3 scripts/validate-release.py
+      - name: Core tests
+        run: swift test --package-path DisplayTuner
+      - name: Package app
+        run: bash DisplayTuner/make-app.sh --package
+      - name: Verify signature and archive
+        run: |
+          codesign --verify --deep --strict "DisplayTuner/.build/app/Display Tuner.app"
+          unzip -t DisplayTuner/dist/DisplayTuner-2.0.0-macOS.zip
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v2.0.0 \
+            DisplayTuner/dist/DisplayTuner-2.0.0-macOS.zip \
+            DisplayTuner/dist/SHA256SUMS.txt \
+            DisplayTuner/Resources/AppIcon.png#DisplayTuner-Icon.png \
+            --target "$GITHUB_SHA" \
+            --title "Display Tuner 2.0 — Your display, refined" \
+            --notes-file RELEASE_NOTES.md
