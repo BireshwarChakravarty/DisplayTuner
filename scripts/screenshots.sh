@@ -12,8 +12,9 @@ shoot() {
     local pid=$!
     sleep 10
     if kill -0 "$pid" 2>/dev/null; then
-        # Still running: sample the main thread if nothing was captured (a hang).
-        [ -f "$OUT/$name.png" ] || { echo "hang? sampling $name"; sample "$pid" 2 2>/dev/null | head -60; }
+        # The in-app capture can't render some controls (disclosure groups);
+        # fall back to a screen capture while the window is up.
+        [ -f "$OUT/$name.png" ] || screencapture -x -o "$OUT/$name.png" 2>/dev/null
         kill "$pid" 2>/dev/null
     else
         echo "exited early: $name"
