@@ -162,8 +162,8 @@ struct DisplayDetailView: View {
             VStack(alignment: .leading, spacing: 18) {
                 HStack { Label(title, systemImage: icon).font(.headline); Spacer(); Text("\(Int(sliderValue(vcp)))% ").font(.system(size: 23, weight: .light, design: .rounded)).monospacedDigit().foregroundStyle(Color.studioCyan) }
                 Slider(value: Binding(get: { sliderValue(vcp) }, set: { value in
-                    if vcp == VCP.brightness { model.manualBrightness[display.id] = value } else { model.manualContrast[display.id] = value }
-                }), in: 0...100, step: 1).disabled(display.ddc.values[vcp] == nil)
+                    if vcp == VCP.brightness { model.manualBrightness[display.id] = value.rounded() } else { model.manualContrast[display.id] = value.rounded() }
+                }), in: 0...100).disabled(display.ddc.values[vcp] == nil)
                 Text(display.ddc.values[vcp] == nil ? "Unavailable over DDC/CI. Use this monitor’s buttons." : "Monitor hardware control · staged until Apply")
                     .font(.caption).foregroundStyle(.secondary)
             }
