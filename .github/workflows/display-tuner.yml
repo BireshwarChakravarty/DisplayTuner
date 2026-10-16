@@ -1,0 +1,40 @@
+name: Display Tuner
+
+on:
+  push:
+    paths:
+      - "DisplayTuner/**"
+      - ".github/workflows/display-tuner.yml"
+  pull_request:
+    paths:
+      - "DisplayTuner/**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-26
+    defaults:
+      run:
+        working-directory: DisplayTuner
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Toolchain
+        run: |
+          sw_vers
+          swift --version
+
+      - name: Build
+        run: swift build -c release
+
+      - name: Test
+        run: swift test
+
+      - name: Package app
+        run: ./make-app.sh --package
+
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: DisplayTuner
+          path: DisplayTuner/dist/DisplayTuner.zip
