@@ -67,6 +67,7 @@ extension AppModel {
     }
 
     func deletePreset(_ id: UUID) {
+        guard !isDemo else { return }
         savedPresets.removeAll { $0.id == id }
         persistPresets()
     }
