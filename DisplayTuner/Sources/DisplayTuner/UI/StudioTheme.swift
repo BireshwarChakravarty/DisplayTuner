@@ -14,11 +14,8 @@ struct StudioGlass: ViewModifier {
     func body(content: Content) -> some View {
         if reduceTransparency {
             content.background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: radius))
-        } else if #available(macOS 26, *) {
-            content.glassEffect(.regular, in: .rect(cornerRadius: radius))
         } else {
-            content.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: radius))
-                .overlay(RoundedRectangle(cornerRadius: radius).strokeBorder(.white.opacity(0.12)))
+            content.glassEffect(.regular, in: .rect(cornerRadius: radius))
         }
     }
 }
@@ -26,8 +23,7 @@ struct StudioGlass: ViewModifier {
 struct StudioGlassGroup<Content: View>: View {
     @ViewBuilder var content: () -> Content
     var body: some View {
-        if #available(macOS 26, *) { GlassEffectContainer(spacing: 12) { content() } }
-        else { content() }
+        GlassEffectContainer(spacing: 12) { content() }
     }
 }
 
