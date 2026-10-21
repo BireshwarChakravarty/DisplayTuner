@@ -6,6 +6,7 @@ public enum UseCase: String, CaseIterable, Codable, Sendable, Identifiable {
     case immersiveGaming
     case photoEditing
     case videoEditing
+    case macbookLook
     case everyday
 
     public var id: String { rawValue }
@@ -16,6 +17,7 @@ public enum UseCase: String, CaseIterable, Codable, Sendable, Identifiable {
         case .immersiveGaming: return "Immersive Gaming"
         case .photoEditing: return "Photo Editing"
         case .videoEditing: return "Video Editing"
+        case .macbookLook: return "MacBook Look"
         case .everyday: return "Everyday"
         }
     }
@@ -26,6 +28,7 @@ public enum UseCase: String, CaseIterable, Codable, Sendable, Identifiable {
         case .immersiveGaming: return "Rich colour, smooth VRR"
         case .photoEditing: return "Accurate sRGB at a print-friendly brightness"
         case .videoEditing: return "Rec. 709 grading, judder-free playback"
+        case .macbookLook: return "Bright, vivid P3 colour like a Retina display"
         case .everyday: return "Sharp, smooth and comfortable"
         }
     }
@@ -37,6 +40,7 @@ public enum UseCase: String, CaseIterable, Codable, Sendable, Identifiable {
         case .immersiveGaming: return "gamecontroller"
         case .photoEditing: return "camera.aperture"
         case .videoEditing: return "film"
+        case .macbookLook: return "laptopcomputer"
         case .everyday: return "desktopcomputer"
         }
     }
@@ -83,5 +87,22 @@ public enum RoomLighting: String, CaseIterable, Codable, Sendable, Identifiable 
         case .normal: return 200
         case .bright: return 280
         }
+    }
+
+    /// The MacBook Look: as bright as a MacBook Air screen (500 cd/m² at
+    /// full brightness) without being glaring in a dim room.
+    public var vividNits: Double {
+        switch self {
+        case .dim: return 250
+        case .normal: return 350
+        case .bright: return 500
+        }
+    }
+
+    /// The white level a preset aims for in this room.
+    public func targetNits(for useCase: UseCase) -> Double {
+        if useCase.isEditing { return editingNits(for: useCase) }
+        if useCase == .macbookLook { return vividNits }
+        return comfortNits
     }
 }

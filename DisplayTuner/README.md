@@ -5,7 +5,8 @@
 A Mac app that finds the best settings for each of your screens, using
 published research for your monitor model, and applies them when you pick
 what you're doing: **Competitive Gaming**, **Immersive Gaming**,
-**Photo Editing**, **Video Editing** or **Everyday**.
+**Photo Editing**, **Video Editing**, **MacBook Look** or **Everyday**.
+**MacBook Look** matches a MacBook Air's Retina screen as closely as the panel allows: native P3 colour, colour-managed by macOS, at up to full brightness (a MacBook Air reaches 500 nits), D65 white, gamma 2.2, Night Shift and HDR off.
 
 It starts with the monitors on this desk:
 

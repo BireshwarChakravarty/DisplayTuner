@@ -9,7 +9,7 @@
 
 Pick a display, choose what you're doing, review exactly what will change, and apply it, with your previous settings saved for Undo. It looks and works like a built-in Mac app.
 
-- **Five presets:** Competitive Gaming, Immersive Gaming, Photo Editing, Video Editing and Everyday. Each previews what it sets, for example "160 Hz · sRGB · 120 nits".
+- **Six presets:** Competitive Gaming, Immersive Gaming, Photo Editing, Video Editing, MacBook Look and Everyday. Each previews what it sets, for example "160 Hz · sRGB · 120 nits".
 - **See your display:** a colour-gamut chart against sRGB and P3, and readouts for refresh rate, desktop size, colour mode and brightness.
 - **Finds the free win:** if a screen runs slower than it can at the same resolution, it offers the fix in one click.
 - **Changes shown before → after,** each with its reason and source.

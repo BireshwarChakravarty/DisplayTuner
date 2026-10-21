@@ -203,6 +203,38 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(rec.manualSteps.contains { $0.setting == "Mode" && $0.value.hasPrefix("Standard") })
     }
 
+    func testMacBookLookIsBrightNativeGamutAndAccurate() throws {
+        let acer = Fixtures.acer(customProfile: "/System/Library/ColorSync/Profiles/sRGB Profile.icc")
+        let rec = RecommendationEngine.recommend(.macbookLook, for: acer, context: context([acer]))
+
+        // The display's own profile (native wide gamut), not sRGB.
+        guard case .colorProfile(let choice) = try XCTUnwrap(change("profile", in: rec)).change else { return XCTFail() }
+        XCTAssertEqual(choice, .factory)
+        XCTAssertTrue(rec.manualSteps.contains { $0.setting == "Mode" && $0.value.hasPrefix("Standard") })
+        XCTAssertTrue(rec.manualSteps.contains { $0.setting == "Gamma" && $0.value == "2.2" })
+        XCTAssertTrue(rec.manualSteps.contains { $0.setting == "High Dynamic Range" && $0.value == "Off" })
+
+        // 350 cd/m² on a 400 cd/m² panel ≈ 88%; a bright room gets all of it.
+        guard case .ddc(let brightness) = try XCTUnwrap(change("ddc-brightness", in: rec)).change else { return XCTFail() }
+        XCTAssertEqual(brightness.value, .percent(88))
+        let bright = RecommendationEngine.recommend(.macbookLook, for: acer, context: context([acer], lighting: .bright))
+        guard case .ddc(let full) = try XCTUnwrap(change("ddc-brightness", in: bright)).change else { return XCTFail() }
+        XCTAssertEqual(full.value, .percent(100))
+
+        XCTAssertNotNil(change("night-shift", in: rec))
+        XCTAssertTrue(rec.notes.contains { $0.contains("224 pixels per inch") })
+    }
+
+    func testMacBookLookLeavesTheMonitorsSRGBPreset() throws {
+        let acer = Fixtures.acer(ddc: .available([
+            VCP.brightness: VCPValue(current: 30, max: 100),
+            VCP.colorPreset: VCPValue(current: ColorPreset.sRGB.rawValue, max: 0x0B)
+        ]))
+        let rec = RecommendationEngine.recommend(.macbookLook, for: acer, context: context([acer]))
+        guard case .ddc(let preset) = try XCTUnwrap(change("ddc-preset", in: rec)).change else { return XCTFail() }
+        XCTAssertNotEqual(preset.value, .raw(ColorPreset.sRGB.rawValue))
+    }
+
     func testCalibrationProfileIsLeftAlone() {
         let acer = Fixtures.acer(customProfile: "/Users/me/Library/ColorSync/Profiles/XV272K calibrated.icc")
         for useCase in UseCase.allCases {

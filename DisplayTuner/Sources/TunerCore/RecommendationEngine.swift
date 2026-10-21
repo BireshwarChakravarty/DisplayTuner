@@ -121,6 +121,8 @@ public enum RecommendationEngine {
                 notes.append("For this screen size, \(ideal.label) is closest to the density macOS is designed for (≈\(Int(ppi.rounded())) points per inch). You can pick it in the mode list.")
             }
 
+            if useCase == .macbookLook { noteRetinaDensity() }
+
             if current.map({ !$0.matches(target) }) ?? true {
                 changes.append(PlannedChange(
                     id: "mode",
@@ -130,6 +132,21 @@ public enum RecommendationEngine {
                     why: why,
                     onByDefault: true))
             }
+        }
+
+        /// How sharp this panel is next to a MacBook Air's (≈224 pixels per inch).
+        mutating func noteRetinaDensity() {
+            guard let native = ModePicker.nativePixelSize(display.modes), let mm = display.widthMM, mm > 50 else { return }
+            let ppi = Double(native.width) / (mm / 25.4)
+            let macPPI = 224.0
+            if ppi >= macPPI - 10 {
+                notes.append("At ≈\(Int(ppi.rounded())) pixels per inch this panel is as dense as a MacBook Air's Retina display.")
+                return
+            }
+            // Angular sharpness matches when distance scales with pixel pitch;
+            // a laptop is viewed from about 40 cm.
+            let distance = Int((40 * macPPI / ppi / 5).rounded() * 5)
+            notes.append("A MacBook Air's screen has ≈224 pixels per inch; this one has ≈\(Int(ppi.rounded())). Up close, text is a little less crisp, which no setting can change. From about \(distance) cm away it looks as fine as a MacBook at laptop distance.")
         }
 
         func refreshReason(_ mode: DisplayMode) -> String {
@@ -170,7 +187,7 @@ public enum RecommendationEngine {
 
             let vrrKnown = profile?.specs.vrr != nil
             switch useCase {
-            case .competitiveGaming, .immersiveGaming, .everyday:
+            case .competitiveGaming, .immersiveGaming, .macbookLook, .everyday:
                 step(.systemSettings, "Refresh Rate", "Variable" + (vrrKnown ? "" : " (if listed)"),
                      path: "System Settings → Displays → \(display.name) → Refresh Rate",
                      why: "Adaptive-Sync matches the screen to the game's frame rate: no tearing, less stutter. Set it after applying here, because the app selects a fixed rate. If the screen flickers at low frame rates, go back to the fixed rate.",
@@ -279,6 +296,13 @@ public enum RecommendationEngine {
                         onByDefault: confirmed,
                         isExperimental: !confirmed))
                 }
+                if useCase == .macbookLook {
+                    if isWideGamut {
+                        notes.append("This is how a MacBook gets its look: a P3-class panel in its native mode, described by its own profile, so macOS colour-manages everything. Photos, video and apps made for P3 show their full, vivid colour, while plain sRGB content stays true instead of looking overcooked. Leave the monitor's saturation and colour boost at their defaults; boosting them only oversaturates skin tones.")
+                    } else {
+                        warnings.append("This screen's gamut is about sRGB, so it can't show the extra P3 colour a MacBook's display has. The preset still sets it bright and accurate.")
+                    }
+                }
                 if isWideGamut && useCase.isGaming {
                     notes.append("In its native mode this panel shows more saturated colour than sRGB. Most games aren't colour-managed, so colours look punchier than intended. Many players like this; the editing presets make it accurate.")
                 }
@@ -297,15 +321,23 @@ public enum RecommendationEngine {
         mutating func planBrightnessAndContrast() {
             if let brightness = ddcValues[VCP.brightness] {
                 let peak = profile?.specs.peakSDRNits ?? RecommendationEngine.assumedPeakNits
-                let target = useCase.isEditing ? context.lighting.editingNits(for: useCase) : context.lighting.comfortNits
+                let target = context.lighting.targetNits(for: useCase)
                 let percent = max(5, min(100, Int((target / peak * 100).rounded())))
                 if abs(brightness.percent - percent) >= 2 {
                     let basis = profile?.specs.peakSDRNits != nil
                         ? "Estimated from the panel's rated \(Int(peak)) cd/m² peak"
                         : "Estimated assuming a typical \(Int(peak)) cd/m² panel"
-                    let purpose = useCase.isEditing
-                        ? "\(Int(target)) cd/m² is the usual editing target for a \(context.lighting.title.lowercased()) room. Too bright a screen makes you edit too dark, and prints come out dim."
-                        : "About \(Int(target)) cd/m² is comfortable in a \(context.lighting.title.lowercased()) room without making an IPS panel's blacks glow."
+                    let room = context.lighting.title.lowercased()
+                    let purpose: String
+                    if useCase.isEditing {
+                        purpose = "\(Int(target)) cd/m² is the usual editing target for a \(room) room. Too bright a screen makes you edit too dark, and prints come out dim."
+                    } else if useCase == .macbookLook {
+                        purpose = target > peak
+                            ? "A MacBook Air reaches 500 cd/m². This panel is rated \(Int(peak)), so a bright room gets all of it."
+                            : "A MacBook Air reaches 500 cd/m²; about \(Int(target)) cd/m² gives the same bright, punchy look in a \(room) room."
+                    } else {
+                        purpose = "About \(Int(target)) cd/m² is comfortable in a \(room) room without making an IPS panel's blacks glow."
+                    }
                     changes.append(PlannedChange(
                         id: "ddc-brightness",
                         change: .ddc(DDCTarget(vcp: VCP.brightness, value: .percent(percent))),
@@ -336,13 +368,15 @@ public enum RecommendationEngine {
         // MARK: Night Shift
 
         mutating func planNightShift() {
-            guard useCase.isEditing, context.nightShiftEnabled == true else { return }
+            guard useCase.isEditing || useCase == .macbookLook, context.nightShiftEnabled == true else { return }
             changes.append(PlannedChange(
                 id: "night-shift",
                 change: .nightShift(enabled: false),
                 title: "Night Shift",
                 detail: "On → Off",
-                why: "Night Shift warms the white point away from D65, which shifts every colour you judge. Restore turns it back on.",
+                why: useCase == .macbookLook
+                    ? "Night Shift tints the screen orange, which dulls the crisp white and colour a MacBook shows. Undo turns it back on."
+                    : "Night Shift warms the white point away from D65, which shifts every colour you judge. Restore turns it back on.",
                 onByDefault: true,
                 isGlobal: true))
         }
@@ -378,6 +412,16 @@ public enum RecommendationEngine {
                 step(.monitorMenu, "Gamma", "2.2",
                      path: "Monitor menu → Picture → Gamma",
                      why: "The sRGB and macOS standard.", sources: ["dxo-targets"])
+            } else if useCase == .macbookLook {
+                step(.monitorMenu, "Picture mode", "Standard / User (not sRGB)",
+                     path: "Monitor menu → Picture / Color",
+                     why: "The panel's full native gamut, which macOS colour-manages like a MacBook's P3 screen.")
+                step(.monitorMenu, "Colour temperature", "6500K / Normal (not Cool)",
+                     path: "Monitor menu → Color → Color Temp",
+                     why: "Apple's displays are set to D65 (6500 K). Cool settings look blue next to a Mac.")
+                step(.monitorMenu, "Gamma", "2.2",
+                     path: "Monitor menu → Picture → Gamma",
+                     why: "Matches the tone curve macOS and Apple's displays use.")
             } else {
                 step(.monitorMenu, "Overdrive / Response time", "The middle setting (often Normal)",
                      path: "Monitor menu → Gaming",
@@ -405,6 +449,13 @@ public enum RecommendationEngine {
                         ? "DisplayHDR 400 doesn't require local dimming, so HDR mostly raises brightness without deeper blacks, and the macOS desktop looks washed out with it on. Try it per game."
                         : "HDR content gains highlight detail and brightness.",
                      sources: isHDR400 ? ["rtings-hdr", "tftcentral-hdr400"] : ["rtings-hdr"])
+            case .macbookLook:
+                step(.systemSettings, "High Dynamic Range", "Off",
+                     path: "System Settings → Displays → \(display.name) → High Dynamic Range",
+                     why: isHDR400
+                        ? "A MacBook Air shows standard dynamic range at up to 500 cd/m². On a DisplayHDR 400 panel, macOS HDR mode dims and washes out the desktop instead of making it brighter."
+                        : "The MacBook Look is a bright standard-range picture. Turn HDR on only for HDR films and games.",
+                     sources: isHDR400 ? ["tftcentral-hdr400"] : [])
             case .photoEditing, .videoEditing:
                 step(.systemSettings, "High Dynamic Range", "Off",
                      path: "System Settings → Displays → \(display.name) → High Dynamic Range",

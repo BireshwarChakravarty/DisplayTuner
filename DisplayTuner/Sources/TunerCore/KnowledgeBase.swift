@@ -111,7 +111,7 @@ public enum KnowledgeBase {
         ),
         osd: [
             OSDStep(
-                useCases: [.competitiveGaming, .immersiveGaming, .everyday],
+                useCases: [.competitiveGaming, .immersiveGaming, .macbookLook, .everyday],
                 setting: "Mode", value: "Standard (or User)",
                 path: "Menu → Color (or Picture) → Mode",
                 why: "Uses the full wide gamut and unlocks brightness. Must match the colour profile this preset sets (the monitor's own).",
@@ -123,13 +123,13 @@ public enum KnowledgeBase {
                 why: "Clamps the ~130% sRGB native gamut to sRGB, so games, web and other unmanaged content show true colours. Acer lists it as factory-calibrated (Delta E < 1). This preset assigns the matching sRGB profile in macOS.",
                 sourceIDs: ["acer-store", "acer-manual", "displayninja-xv272u"]),
             OSDStep(
-                useCases: [.competitiveGaming, .immersiveGaming, .everyday],
+                useCases: [.competitiveGaming, .immersiveGaming, .macbookLook, .everyday],
                 setting: "Over Drive", value: "Normal",
                 path: "Menu → Gaming → Over Drive",
                 why: "Extreme adds visible overshoot (inverse ghosting) on this Acer IPS family, and Acer forces Normal whenever Adaptive-Sync is on anyway.",
                 sourceIDs: ["acer-manual", "displayninja-xv272u", "blurbusters-xv272"]),
             OSDStep(
-                useCases: [.competitiveGaming, .immersiveGaming, .everyday],
+                useCases: [.competitiveGaming, .immersiveGaming, .macbookLook, .everyday],
                 setting: "Adaptive-Sync / FreeSync Premium", value: "On",
                 path: "Menu → Gaming → Adaptive-Sync",
                 why: "Needed before macOS offers a Variable refresh rate for this screen.",
@@ -141,11 +141,29 @@ public enum KnowledgeBase {
                 why: "Lifts shadow detail for visibility at the cost of contrast; it is a visibility aid, not an image-quality setting.",
                 sourceIDs: ["itechguides-nitro"]),
             OSDStep(
-                useCases: [.immersiveGaming, .photoEditing, .videoEditing, .everyday],
+                useCases: [.immersiveGaming, .photoEditing, .videoEditing, .macbookLook, .everyday],
                 setting: "Black Boost", value: "Off / 0",
                 path: "Menu → Picture (or Gaming) → Black Boost",
                 why: "Any boost raises blacks and flattens contrast, which skews grading and shadow detail.",
                 sourceIDs: ["itechguides-nitro"]),
+            OSDStep(
+                useCases: [.macbookLook],
+                setting: "Colour Temp", value: "Normal (try Warm if whites look bluer than your MacBook's)",
+                path: "Menu → Color → Color Temp",
+                why: "Apple's displays are set to D65 (6500 K). Reviews of this Nitro family measured the default close to that (about 6200–6600 K). Cool looks blue next to a Mac. For a side-by-side check, turn True Tone off on the MacBook.",
+                sourceIDs: ["pcworld-xv272", "rtings-xv272u"]),
+            OSDStep(
+                useCases: [.macbookLook],
+                setting: "Gamma", value: "2.2",
+                path: "Menu → Color → Gamma",
+                why: "The tone curve macOS and Apple's displays use. Other values make midtones look flat or heavy.",
+                sourceIDs: ["rtings-xv272u"]),
+            OSDStep(
+                useCases: [.macbookLook],
+                setting: "Saturation / 6-axis colour", value: "Default",
+                path: "Menu → Color",
+                why: "The vivid look comes from the panel's wide gamut shown accurately. Raising saturation pushes skin tones and skies past what a MacBook shows.",
+                sourceIDs: []),
             OSDStep(
                 useCases: [.competitiveGaming],
                 setting: "DFR (dual mode)", value: "On only if you want 1080p @ 320 Hz",
@@ -183,6 +201,10 @@ public enum KnowledgeBase {
                    url: "https://www.tomshardware.com/reviews/acer-nitro-xv272u-kvbmiiprzx-review"),
             Source(id: "blurbusters-xv272", title: "Blur Busters forum: Acer XV272 hands-on (VRR with Over Drive)",
                    url: "https://forums.blurbusters.com/viewtopic.php?t=11054"),
+            Source(id: "pcworld-xv272", title: "PCWorld: Acer Nitro XV272 review (default colour temperature ≈6200 K)",
+                   url: "https://www.pcworld.com/article/701844/acer-nitro-xv272-review-top-tier-gaming-on-a-1080p-monitor.html"),
+            Source(id: "rtings-xv272u", title: "RTINGS: Acer Nitro XV272U KVbmiiprzx (≈6550 K, gamma 2.2 after calibration)",
+                   url: "https://www.rtings.com/monitor/tools/compare/acer-nitro-xv272u-kvbmiiprzx-vs-samsung-odyssey-g51c-s27cg51/23638/39538"),
             Source(id: "itechguides-nitro", title: "iTechGuides: Acer Nitro monitor settings (Black Boost)",
                    url: "https://www.itechguides.com/top-5-acer-nitro-monitor-settings-best-guide/"),
             Source(id: "apple-vrr", title: "Apple: Use an Adaptive Sync external display with your Mac",

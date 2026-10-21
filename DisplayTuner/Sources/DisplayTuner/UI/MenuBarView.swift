@@ -29,7 +29,7 @@ struct MenuBarView: View {
             footer
         }
         .padding(12)
-        .frame(width: 344)
+        .frame(width: 368)
     }
 
     // MARK: Header
@@ -328,6 +328,7 @@ private func shortTitle(_ useCase: UseCase) -> String {
     case .immersiveGaming: return "Immersive"
     case .photoEditing: return "Photo"
     case .videoEditing: return "Video"
+    case .macbookLook: return "MacBook"
     case .everyday: return "Everyday"
     }
 }
@@ -353,7 +354,7 @@ private struct PresetButton: View {
                             .foregroundStyle(selected ? Color.white : Color.primary)
                     }
                 }
-                .frame(width: 46, height: 46)
+                .frame(width: 42, height: 42)
                 .shadow(color: selected ? Color.accentColor.opacity(0.35) : .clear, radius: 6, y: 2)
                 Text(shortTitle(useCase))
                     .font(.system(size: 10.5, weight: selected ? .semibold : .regular))

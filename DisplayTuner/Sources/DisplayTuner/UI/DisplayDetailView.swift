@@ -191,10 +191,14 @@ struct DisplayDetailView: View {
             parts.append(mode.refreshLabel)
         }
         if !display.hasCalibration {
-            parts.append(option.isEditing && rec.profile?.specs.hasSRGBMode == true ? "sRGB" : "Native colour")
+            let wide = display.primaries?.isWideGamut ?? rec.profile?.specs.isWideGamut ?? false
+            if option.isEditing && rec.profile?.specs.hasSRGBMode == true { parts.append("sRGB") }
+            else if option == .macbookLook && wide { parts.append("P3 colour") }
+            else { parts.append("Native colour") }
             if display.ddc.values[VCP.brightness] != nil {
-                let nits = option.isEditing ? model.lighting.editingNits(for: option) : model.lighting.comfortNits
-                parts.append("\(Int(nits)) nits")
+                let nits = model.lighting.targetNits(for: option)
+                let peak = rec.profile?.specs.peakSDRNits
+                parts.append(peak.map { nits >= $0 } ?? false ? "Max brightness" : "\(Int(nits)) nits")
             }
         }
         return parts.joined(separator: " · ")
