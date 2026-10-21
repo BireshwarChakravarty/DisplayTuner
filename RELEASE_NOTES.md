@@ -22,7 +22,7 @@ Research-based display settings for gaming and editing on Apple Silicon Macs. Pi
 
 ## Install
 
-Download **DisplayTuner-1.0.0-macOS.zip**, unzip it, and move **Display Tuner.app** to Applications. Requires Apple Silicon and macOS 26 or later. The app is ad-hoc signed, not notarized: on first launch, approve it in System Settings → Privacy & Security. SHA256SUMS.txt accompanies the download.
+Download **DisplayTuner-1.1.0-macOS.zip**, unzip it, and move **Display Tuner.app** to Applications. Requires Apple Silicon and macOS 26 or later. The app is ad-hoc signed, not notarized: on first launch, approve it in System Settings → Privacy & Security. SHA256SUMS.txt accompanies the download.
 
 ## Limits
 
