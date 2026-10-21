@@ -1,11 +1,15 @@
-# Display Tuner 1.0
+# Display Tuner 1.1
 
 Research-based display settings for gaming and editing on Apple Silicon Macs. Pick a screen, choose what you're doing, review exactly what will change, and apply it, with your previous settings saved for Undo.
+
+## New in 1.1
+
+- **MacBook Look:** bright, vivid P3 colour like a MacBook Air's Retina display: the panel's native gamut colour-managed by macOS, brightness up to the panel's maximum, D65 white and gamma 2.2, with Night Shift and HDR off. It also tells you how far to sit for MacBook-level sharpness.
+- **Six presets in the menu bar,** with labels that fit.
 
 ## Highlights
 
 - **Six presets:** Competitive Gaming, Immersive Gaming, Photo Editing, Video Editing, MacBook Look and Everyday. Each tile previews what it sets, for example "160 Hz · sRGB · 120 nits", and room lighting sets the brightness target.
-- **MacBook Look:** bright, vivid P3 colour like a MacBook Air's Retina display: the panel's native gamut colour-managed by macOS, brightness up to the panel's maximum, D65 white and gamma 2.2, with Night Shift and HDR off. It also tells you how far to sit for MacBook-level sharpness.
 - **Overview at a glance:** a colour-gamut chart of your display against sRGB and P3, and readouts for refresh rate, desktop size, colour mode and brightness in estimated nits.
 - **Finds the free win:** if a screen runs slower than it can at the same resolution (for example 60 Hz instead of 160 Hz), it says so with a one-click fix.
 - **Changes shown before → after,** each with its reason and source, and a switch to leave any one out.

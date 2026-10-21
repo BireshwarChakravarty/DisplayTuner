@@ -359,7 +359,8 @@ private struct PresetButton: View {
                 Text(shortTitle(useCase))
                     .font(.system(size: 10.5, weight: selected ? .semibold : .regular))
                     .foregroundStyle(selected ? Color.primary : Color.secondary)
-                    .lineLimit(1).minimumScaleFactor(0.8)
+                    .lineLimit(1).minimumScaleFactor(0.7)
+                    .frame(width: 50)
             }
             .opacity(isEnabled ? 1 : 0.5)
             .contentShape(Rectangle())

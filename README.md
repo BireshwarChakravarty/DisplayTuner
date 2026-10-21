@@ -2,7 +2,7 @@
   <img src="docs/icon.png" width="128" alt="Display Tuner icon" />
   <h1>Display Tuner</h1>
   <p><strong>Research-based display settings for gaming and editing on the Mac.</strong></p>
-  <p><a href="https://github.com/BireshwarChakravarty/DisplayTuner/releases/latest">Download Display Tuner 1.0</a> · <a href="DisplayTuner/README.md">Technical guide & research</a></p>
+  <p><a href="https://github.com/BireshwarChakravarty/DisplayTuner/releases/latest">Download Display Tuner 1.1</a> · <a href="DisplayTuner/README.md">Technical guide & research</a></p>
 </div>
 
 ## What it does
