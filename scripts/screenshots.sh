@@ -35,6 +35,9 @@ shoot presets dark --presets
 shoot activity dark --activity
 shoot display-dark dark
 shoot display-light light
+defaults write app.displaytuner.DisplayTuner showInspector -bool true
+shoot display-inspector light
+defaults write app.displaytuner.DisplayTuner showInspector -bool false
 shoot display-photo-light light --usecase=photoEditing
 shoot display-photo-dark dark --usecase=photoEditing
 defaults delete app.displaytuner.DisplayTuner appearance 2>/dev/null || true

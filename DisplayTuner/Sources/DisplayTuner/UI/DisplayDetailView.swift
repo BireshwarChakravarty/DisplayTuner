@@ -2,9 +2,10 @@ import AppKit
 import SwiftUI
 import TunerCore
 
-/// One display: an overview with its colour gamut, activity tiles that preview
-/// what they set, the changes as before → after, a checklist for what only
-/// the monitor can change, then fine-tuning and details. Apply floats below.
+/// One display, laid out the way Apple's own Liquid Glass apps are: an
+/// edge-to-edge hero that extends under the sidebar, presets as a strip of
+/// cards, grouped sections for what will change and what's left to do, a
+/// research inspector on the trailing edge, and Apply floating in glass.
 struct DisplayDetailView: View {
     @EnvironmentObject private var model: AppModel
     let display: DisplayFacts
@@ -12,6 +13,7 @@ struct DisplayDetailView: View {
     @ViewState private var presetName = ""
     @ViewState private var expandedSteps: Set<String> = []
     @AppStorage("doneSteps") private var doneStepsRaw = ""
+    @AppStorage("showInspector") private var showInspector = false
 
     private var rec: Recommendation { model.recommendation(for: display) }
     private var changes: [PlannedChange] { model.changes(for: display) }
@@ -21,34 +23,46 @@ struct DisplayDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                overview
-                if let faster = fasterMode, let current = display.currentMode { refreshBanner(current: current, faster: faster) }
-                activityTiles
-                changeList
-                if !model.results.isEmpty { lastChange }
-                checklist
-                adjust
-                about
+            VStack(alignment: .leading, spacing: 0) {
+                hero
+                VStack(alignment: .leading, spacing: 30) {
+                    presets
+                    changeSection
+                    if !model.results.isEmpty { lastChange }
+                    checklist
+                    adjust
+                }
+                .padding(.horizontal, 28).padding(.top, 26).padding(.bottom, 36)
+                .frame(maxWidth: 980, alignment: .leading)
+                .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, 24).padding(.top, 16).padding(.bottom, 100)
-            .frame(maxWidth: 1000)
-            .frame(maxWidth: .infinity)
         }
         .navigationTitle(display.name)
-        .safeAreaInset(edge: .bottom, spacing: 0) { applyBar }
+        .safeAreaBar(edge: .bottom) { applyBar }
+        .inspector(isPresented: $showInspector) {
+            DisplayInspector(display: display, rec: rec)
+                .inspectorColumnWidth(min: 280, ideal: 320, max: 420)
+        }
         .toolbar {
             ToolbarItem {
                 Menu {
-                    Button("Identify Display") { model.identify(display) }.disabled(model.isDemo)
-                    Button("Open Displays Settings…") { openDisplaySettings() }
+                    Button("Identify Display", systemImage: "eye") { model.identify(display) }.disabled(model.isDemo)
+                    Button("Open Displays Settings…", systemImage: "gearshape") { openDisplaySettings() }
                     Divider()
-                    Button("Save as Preset…") { savingPreset = true }.disabled(!editable || model.isDemo)
-                    Button("Restore Settings From Before Display Tuner") { Task { await model.restoreOriginals() } }
-                        .disabled(model.originalSnapshot == nil || !model.canChange)
+                    Button("Save as Preset…", systemImage: "square.and.arrow.down") { savingPreset = true }
+                        .disabled(!editable || model.isDemo)
+                    Button("Restore Settings From Before Display Tuner", systemImage: "clock.arrow.circlepath") {
+                        Task { await model.restoreOriginals() }
+                    }
+                    .disabled(model.originalSnapshot == nil || !model.canChange)
                     Divider()
-                    Button("Export Diagnostics…") { model.exportDiagnostics() }
-                } label: { Label("More", systemImage: "ellipsis.circle") }
+                    Button("Export Diagnostics…", systemImage: "doc.text.magnifyingglass") { model.exportDiagnostics() }
+                } label: { Label("More", systemImage: "ellipsis") }
+            }
+            ToolbarSpacer(.fixed)
+            ToolbarItem {
+                Button { showInspector.toggle() } label: { Label("Display Details", systemImage: "info") }
+                    .help("Show research, specifications and sources")
             }
         }
         .alert("Save Preset", isPresented: $savingPreset) {
@@ -58,38 +72,61 @@ struct DisplayDetailView: View {
         } message: { Text("Saves the activity, room lighting, display mode and brightness/contrast. Loading a preset lets you review it before applying.") }
     }
 
-    // MARK: Overview
+    // MARK: Hero
 
-    private var overview: some View {
-        Card {
-            HStack(alignment: .top, spacing: 24) {
-                GamutDiagram(primaries: display.primaries).frame(width: 210)
-                VStack(alignment: .leading, spacing: 14) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(display.name).font(.title2.weight(.semibold))
-                        Text(specLine).foregroundStyle(.secondary)
-                        HStack(spacing: 8) {
-                            if rec.profile != nil { Badge(text: "Researched model", symbol: "checkmark.seal.fill", color: .green) }
-                            if display.hasCalibration { Badge(text: "Calibration protected", symbol: "lock.fill", color: .secondary) }
-                            if let auto = model.autoState { Badge(text: "Auto · \(auto.appName)", symbol: "wand.and.stars", color: .orange) }
+    private var hero: some View {
+        HeroArtwork(useCase: useCase)
+            .frame(height: 300)
+            .backgroundExtensionEffect()
+            .overlay(alignment: .bottomLeading) {
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack(alignment: .center, spacing: 20) {
+                        MonitorGlyph(display: display, useCase: useCase)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(display.name)
+                                .font(.system(size: 30, weight: .bold))
+                                .lineLimit(1).minimumScaleFactor(0.7)
+                            Text(specLine).font(.title3).opacity(0.85)
+                            HStack(spacing: 8) {
+                                if rec.profile != nil { HeroTag(text: "Researched model", symbol: "checkmark.seal.fill") }
+                                if display.hasCalibration { HeroTag(text: "Calibration protected", symbol: "lock.fill") }
+                                if let auto = model.autoState { HeroTag(text: "Auto · \(auto.appName)", symbol: "wand.and.stars") }
+                            }
                         }
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.25), radius: 8, y: 2)
                     }
-                    Grid(horizontalSpacing: 12, verticalSpacing: 12) {
-                        GridRow {
-                            Stat(title: "Refresh", value: display.currentMode?.refreshLabel ?? "—", symbol: "speedometer",
-                                 detail: fasterMode.map { "\($0.refreshLabel) available" } ?? "Fastest at this size",
-                                 progress: refreshProgress, warn: fasterMode != nil)
-                            Stat(title: "Looks like", value: display.currentMode.map { "\($0.width) × \($0.height)" } ?? "—", symbol: "rectangle.dashed",
-                                 detail: display.nativePixels.map { "Panel \($0.width) × \($0.height)" } ?? "", progress: nil)
-                        }
-                        GridRow {
-                            Stat(title: "Colour", value: colourMode, symbol: "paintpalette",
-                                 detail: display.primaries.map { "\(percent($0.coverage(of: .sRGB))) sRGB · \(percent($0.coverage(of: .displayP3))) P3" } ?? "Gamut unknown",
-                                 progress: display.primaries.map { $0.coverage(of: .displayP3) })
-                            Stat(title: "Brightness", value: brightnessValue, symbol: "sun.max",
-                                 detail: brightnessDetail, progress: display.ddc.values[VCP.brightness].map { Double($0.percent) / 100 })
-                        }
+                    stats
+                }
+                .padding(.horizontal, 28).padding(.bottom, 22)
+                .frame(maxWidth: 980, alignment: .leading)
+                .frame(maxWidth: .infinity)
+            }
+    }
+
+    private var stats: some View {
+        GlassEffectContainer(spacing: 10) {
+            HStack(spacing: 10) {
+                StatChip(title: "Refresh", value: display.currentMode?.refreshLabel ?? "—", symbol: "speedometer",
+                         detail: fasterMode.map { "\($0.refreshLabel) available" } ?? "Fastest at this size",
+                         warn: fasterMode != nil)
+                StatChip(title: "Looks like", value: display.currentMode.map { "\($0.width) × \($0.height)" } ?? "—",
+                         symbol: "rectangle.dashed",
+                         detail: display.nativePixels.map { "Panel \($0.width) × \($0.height)" } ?? "")
+                StatChip(title: "Colour", value: colourMode, symbol: "paintpalette",
+                         detail: display.primaries.map { "\(percent($0.coverage(of: .sRGB))) sRGB · \(percent($0.coverage(of: .displayP3))) P3" } ?? "Gamut unknown")
+                StatChip(title: "Brightness", value: brightnessValue, symbol: "sun.max", detail: brightnessDetail)
+                if let faster = fasterMode {
+                    Button { model.chooseMode(faster, for: display) } label: {
+                        Label("Use \(faster.refreshLabel)", systemImage: "bolt.fill")
+                            .font(.headline)
+                            .padding(.horizontal, 6).padding(.vertical, 4)
                     }
+                    .buttonStyle(.glassProminent)
+                    .tint(.orange)
+                    .controlSize(.large)
+                    .disabled(!model.canChange)
+                    .help("Same resolution at \(faster.refreshLabel): smoother motion and lower input lag. Review it under Changes, then Apply.")
                 }
             }
         }
@@ -104,12 +141,6 @@ struct DisplayDetailView: View {
             parts.append(mode.label)
         }
         return parts.joined(separator: " · ")
-    }
-
-    private var refreshProgress: Double? {
-        guard let current = display.currentMode?.refreshRate, display.maxRefresh > 0 else { return nil }
-        let best = display.currentMode.flatMap { ModePicker.bestMode(for: $0.layout, in: display.modes, policy: .highest)?.refreshRate } ?? display.maxRefresh
-        return best > 0 ? min(1, current / best) : nil
     }
 
     private var colourMode: String {
@@ -131,8 +162,6 @@ struct DisplayDetailView: View {
 
     private func percent(_ value: Double) -> String { "\(Int((value * 100).rounded()))%" }
 
-    // MARK: Refresh banner
-
     /// The fastest mode at the current desktop size, when the display is running slower.
     private var fasterMode: DisplayMode? {
         guard display.mirrorOf == nil, let current = display.currentMode,
@@ -141,44 +170,34 @@ struct DisplayDetailView: View {
         return best
     }
 
-    private func refreshBanner(current: DisplayMode, faster: DisplayMode) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: "bolt.fill").font(.title2).foregroundStyle(.orange)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Running at \(current.refreshLabel), \(faster.refreshLabel) is available").font(.headline)
-                Text("Same resolution, smoother motion and lower input lag.").font(.callout).foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button("Use \(faster.refreshLabel)") { model.chooseMode(faster, for: display) }
-                .buttonStyle(.borderedProminent).tint(.orange)
-                .disabled(!model.canChange)
-        }
-        .padding(16)
-        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.orange.opacity(0.3)))
-    }
+    // MARK: Presets
 
-    // MARK: Activity
-
-    private var activityTiles: some View {
-        Card(title: "What are you doing?", trailing: {
-            Picker("Room", selection: $model.lighting) {
-                Label("Dim", systemImage: "moon").tag(RoomLighting.dim)
-                Label("Normal", systemImage: "lamp.desk").tag(RoomLighting.normal)
-                Label("Bright", systemImage: "sun.max").tag(RoomLighting.bright)
-            }
-            .pickerStyle(.segmented).labelsHidden().fixedSize()
-            .disabled(!editable)
-            .help("Room lighting sets the brightness target")
-        }) {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 10)], spacing: 10) {
-                ForEach(UseCase.allCases) { option in
-                    ActivityTile(useCase: option, selected: option == useCase, summary: summary(for: option)) {
-                        model.setUseCase(option, for: display.id)
-                    }
-                    .disabled(!editable)
+    private var presets: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                SectionTitle("What are you doing?")
+                Spacer()
+                Picker("Room", selection: $model.lighting) {
+                    Label("Dim", systemImage: "moon").tag(RoomLighting.dim)
+                    Label("Normal", systemImage: "lamp.desk").tag(RoomLighting.normal)
+                    Label("Bright", systemImage: "sun.max").tag(RoomLighting.bright)
                 }
+                .pickerStyle(.segmented).labelsHidden().fixedSize()
+                .disabled(!editable)
+                .help("How bright the room is. It sets the brightness target.")
             }
+            ScrollView(.horizontal) {
+                HStack(spacing: 14) {
+                    ForEach(UseCase.allCases) { option in
+                        PresetCard(useCase: option, selected: option == useCase, summary: summary(for: option)) {
+                            withAnimation(.smooth) { model.setUseCase(option, for: display.id) }
+                        }
+                        .disabled(!editable)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .scrollIndicators(.never)
         }
     }
 
@@ -206,45 +225,50 @@ struct DisplayDetailView: View {
 
     // MARK: Changes
 
-    private var changeList: some View {
-        Card(title: "Changes", trailing: {
+    private var changeSection: some View {
+        GroupedSection(title: "Changes", trailing: {
             Text(selectedCount == 0 ? "Nothing to change" : "\(selectedCount) selected")
-                .font(.callout).foregroundStyle(.secondary)
-        }) {
-            VStack(spacing: 0) {
-                if changes.isEmpty {
-                    Label("Already set for \(useCase.title.lowercased()).", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 6)
-                }
-                ForEach(Array(changes.enumerated()), id: \.element.id) { index, change in
-                    if index > 0 { Divider().padding(.leading, 44) }
-                    ChangeRow(change: change, isOn: Binding(get: { model.isOn(change, for: display) },
-                                                            set: { model.setOn($0, change, for: display) }))
-                        .disabled(!editable)
-                }
-                ForEach(rec.warnings, id: \.self) { warning in
-                    Label(warning, systemImage: "exclamationmark.triangle.fill")
-                        .font(.callout).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 10)
-                }
+                .foregroundStyle(.secondary)
+        }, footer: rec.warnings.isEmpty ? nil : AnyView(warnings)) {
+            if changes.isEmpty {
+                Label("Already set for \(useCase.title.lowercased()).", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+            }
+            ForEach(Array(changes.enumerated()), id: \.element.id) { index, change in
+                if index > 0 { Divider().padding(.leading, 60) }
+                ChangeRow(change: change, isOn: Binding(get: { model.isOn(change, for: display) },
+                                                        set: { model.setOn($0, change, for: display) }))
+                    .disabled(!editable)
+            }
+        }
+    }
+
+    private var warnings: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(rec.warnings, id: \.self) { warning in
+                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
     private var lastChange: some View {
-        Card(title: "Last change") {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(model.results) { result in
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(result.display.isEmpty ? result.title : "\(result.title) · \(result.display)")
-                            Text(result.message).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                        }
-                    } icon: {
-                        Image(systemName: result.ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                            .foregroundStyle(result.ok ? .green : .orange)
+        GroupedSection(title: "Last change") {
+            ForEach(Array(model.results.enumerated()), id: \.element.id) { index, result in
+                if index > 0 { Divider().padding(.leading, 46) }
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Image(systemName: result.ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(result.ok ? .green : .orange)
+                        .frame(width: 20)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(result.display.isEmpty ? result.title : "\(result.title) · \(result.display)")
+                        Text(result.message).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
+                    Spacer(minLength: 0)
                 }
+                .padding(.horizontal, 14).padding(.vertical, 10)
             }
         }
     }
@@ -258,10 +282,10 @@ struct DisplayDetailView: View {
     }
 
     private static let places: [Place] = [
-        Place(place: .monitorMenu, title: "On the monitor", symbol: "slider.horizontal.3"),
+        Place(place: .monitorMenu, title: "On the Monitor", symbol: "slider.horizontal.3"),
         Place(place: .systemSettings, title: "In System Settings", symbol: "gearshape"),
         Place(place: .hardware, title: "Cable", symbol: "cable.connector"),
-        Place(place: .apps, title: "In your apps", symbol: "square.grid.2x2")
+        Place(place: .apps, title: "In Your Apps", symbol: "square.grid.2x2")
     ]
 
     private var doneSteps: Set<String> { Set(doneStepsRaw.split(separator: "\n").map(String.init)) }
@@ -284,30 +308,30 @@ struct DisplayDetailView: View {
         if !steps.isEmpty {
             let done = doneSteps
             let doneCount = steps.filter { done.contains(stepKey($0)) }.count
-            Card(title: "Finish by hand", trailing: {
-                HStack(spacing: 8) {
-                    ProgressView(value: Double(doneCount), total: Double(steps.count)).frame(width: 80)
-                    Text("\(doneCount) of \(steps.count) done").font(.callout).foregroundStyle(.secondary).monospacedDigit()
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .firstTextBaseline) {
+                    SectionTitle("Finish by Hand")
+                    Spacer()
+                    Gauge(value: Double(doneCount), in: 0...Double(steps.count)) { EmptyView() }
+                        .gaugeStyle(.accessoryCircularCapacity)
+                        .scaleEffect(0.55).frame(width: 30, height: 30)
+                    Text("\(doneCount) of \(steps.count) done").foregroundStyle(.secondary).monospacedDigit()
                 }
-            }) {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Only the monitor's buttons, System Settings or your apps can change these. Tick them off as you go.")
-                        .font(.callout).foregroundStyle(.secondary)
-                    ForEach(Self.places, id: \.title) { place in
-                        let group = steps.filter { $0.place == place.place }
-                        if !group.isEmpty {
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack {
-                                    Label(place.title, systemImage: place.symbol).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-                                    Spacer()
-                                    if place.place == .systemSettings {
-                                        Button("Open Displays Settings…") { openDisplaySettings() }.controlSize(.small)
-                                    }
-                                }
-                                ForEach(group) { step in
-                                    StepRow(step: step, done: done.contains(stepKey(step)), expanded: expandedSteps.contains(step.id),
-                                            toggleDone: { toggleDone(step) }, toggleExpanded: { toggleExpanded(step) })
-                                }
+                Text("Only the monitor's buttons, System Settings or your apps can change these. Tick them off as you go.")
+                    .foregroundStyle(.secondary)
+                ForEach(Self.places, id: \.title) { place in
+                    let group = steps.filter { $0.place == place.place }
+                    if !group.isEmpty {
+                        GroupedSection(title: place.title, symbol: place.symbol, small: true, trailing: {
+                            if place.place == .systemSettings {
+                                Button("Open Displays Settings…") { openDisplaySettings() }
+                                    .buttonStyle(.glass).controlSize(.small)
+                            }
+                        }) {
+                            ForEach(Array(group.enumerated()), id: \.element.id) { index, step in
+                                if index > 0 { Divider().padding(.leading, 46) }
+                                StepRow(step: step, done: done.contains(stepKey(step)), expanded: expandedSteps.contains(step.id),
+                                        toggleDone: { toggleDone(step) }, toggleExpanded: { toggleExpanded(step) })
                             }
                         }
                     }
@@ -316,13 +340,14 @@ struct DisplayDetailView: View {
         }
     }
 
-    // MARK: Fine-tuning
+    // MARK: Adjust
 
     private var adjust: some View {
-        Card(title: "Adjust") {
-            VStack(alignment: .leading, spacing: 12) {
+        GroupedSection(title: "Adjust", footer: AnyView(Text("Adjustments are staged and appear under Changes until you apply them.")
+            .foregroundStyle(.secondary))) {
+            VStack(spacing: 0) {
                 if !rec.modeOptions.isEmpty {
-                    LabeledContent("Resolution & refresh rate") {
+                    SettingRow(title: "Resolution & refresh rate", symbol: "display") {
                         Picker("Resolution & refresh rate", selection: Binding(get: { model.pickerMode(for: display) },
                                                                                set: { if let mode = $0 { model.chooseMode(mode, for: display) } })) {
                             ForEach(rec.modeOptions) { mode in Text(mode.label).tag(Optional(mode)) }
@@ -331,101 +356,38 @@ struct DisplayDetailView: View {
                     }
                 }
                 if display.hasCalibration {
+                    if !rec.modeOptions.isEmpty { Divider().padding(.leading, 46) }
                     Label("Brightness and contrast are locked to protect your calibration.", systemImage: "lock.fill")
                         .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
                 } else if display.mirrorOf == nil && !display.isBuiltIn {
-                    slider(VCP.brightness, "Brightness", "sun.min", "sun.max")
-                    slider(VCP.contrast, "Contrast", "circle.lefthalf.filled", "circle.righthalf.filled")
+                    if !rec.modeOptions.isEmpty { Divider().padding(.leading, 46) }
+                    slider(VCP.brightness, "Brightness", "sun.max")
+                    Divider().padding(.leading, 46)
+                    slider(VCP.contrast, "Contrast", "circle.lefthalf.filled")
                 }
-                Text("Adjustments are staged and appear under Changes until you apply them.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
             .disabled(!editable)
         }
     }
 
-    private func slider(_ vcp: UInt8, _ title: String, _ low: String, _ high: String) -> some View {
+    private func slider(_ vcp: UInt8, _ title: String, _ symbol: String) -> some View {
         let available = display.ddc.values[vcp] != nil
         let value = (vcp == VCP.brightness ? model.manualBrightness[display.id] : model.manualContrast[display.id])
             ?? Double(display.ddc.values[vcp]?.percent ?? 0)
-        return LabeledContent(title) {
-            HStack(spacing: 8) {
-                Image(systemName: low).foregroundStyle(.secondary)
+        return SettingRow(title: title, symbol: symbol) {
+            HStack(spacing: 10) {
                 Slider(value: Binding(get: { value }, set: { new in
                     if vcp == VCP.brightness { model.manualBrightness[display.id] = new.rounded() }
                     else { model.manualContrast[display.id] = new.rounded() }
                 }), in: 0...100)
-                Image(systemName: high).foregroundStyle(.secondary)
-                Text(available ? "\(Int(value))%" : "—").monospacedDigit().foregroundStyle(.secondary).frame(width: 44, alignment: .trailing)
+                Text(available ? "\(Int(value))%" : "—").monospacedDigit().foregroundStyle(.secondary).frame(width: 40, alignment: .trailing)
             }
-            .frame(maxWidth: 360)
+            .frame(maxWidth: 320)
         }
         .disabled(!available)
         .help(available ? "" : "Not available over DDC/CI: use the monitor's buttons")
-    }
-
-    // MARK: About
-
-    private var about: some View {
-        Card(title: "About this display") {
-            VStack(alignment: .leading, spacing: 10) {
-                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 6) {
-                    if let specs = rec.profile?.specs {
-                        row("Panel", "\(specs.size) \(specs.panel.rawValue), \(specs.native)")
-                        row("Refresh rate", specs.maxRefresh)
-                        row("Colour", specs.gamut)
-                        if let hdr = specs.hdr { row("HDR", hdr) }
-                        if let vrr = specs.vrr { row("Variable refresh", vrr) }
-                    }
-                    row("Colour profile", display.customProfilePath == nil
-                        ? "\(display.profileName ?? "Display's own")"
-                        : (display.profileName ?? display.customProfilePath ?? "Custom"))
-                    row("DDC/CI", ddcText)
-                    if let caps = display.capabilities { row("Monitor reports", caps.describedControls.joined(separator: ", ")) }
-                }
-                if !rec.notes.isEmpty {
-                    Divider()
-                    ForEach(rec.notes, id: \.self) { note in
-                        Label(note, systemImage: "info.circle").font(.callout).foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                if let profile = rec.profile {
-                    DisclosureGroup("Research and sources") {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(profile.confidence).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                            ForEach(sources) { source in
-                                if let url = URL(string: source.url) { Link(source.title, destination: url).font(.callout) }
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 6)
-                    }
-                }
-            }
-        }
-    }
-
-    private func row(_ label: String, _ value: String) -> some View {
-        GridRow {
-            Text(label).foregroundStyle(.secondary)
-            Text(value).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private var ddcText: String {
-        switch display.ddc {
-        case .unknown, .probing: return "Checking…"
-        case .unavailable: return display.isBuiltIn ? "Not needed" : "Not available: use the monitor's buttons"
-        case .available(let values):
-            let parts = [VCP.brightness, VCP.contrast].compactMap { vcp in values[vcp].map { "\(VCP.name(vcp).lowercased()) \($0.percent)%" } }
-            return parts.isEmpty ? "Connected" : "Connected · " + parts.joined(separator: ", ")
-        }
-    }
-
-    private var sources: [Source] {
-        var seen = Set<String>()
-        return ((rec.profile?.sources ?? []) + rec.sources).filter { seen.insert($0.url).inserted }
     }
 
     // MARK: Apply bar
@@ -442,30 +404,39 @@ struct DisplayDetailView: View {
     }
 
     private var applyBar: some View {
-        HStack(spacing: 12) {
-            Image(systemName: useCase.symbol).font(.title3).foregroundStyle(.tint).frame(width: 28)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(useCase.title).font(.headline)
-                Text(statusText).font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            if model.isBusy { ProgressView().controlSize(.small) }
-            Button("Undo") { Task { await model.undoLastApply() } }
-                .disabled(model.lastSnapshot == nil || !model.canChange)
-            Button(model.recoveryRequired ? "Retry Recovery" : "Apply") {
-                Task {
-                    if model.recoveryRequired { await model.undoLastApply() }
-                    else { await model.apply(to: [display.id]) }
+        GlassEffectContainer(spacing: 14) {
+            HStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    Image(systemName: useCase.symbol).font(.title3).foregroundStyle(.tint).frame(width: 26)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(useCase.title).font(.headline)
+                        Text(statusText).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    if model.isBusy { ProgressView().controlSize(.small) }
                 }
+                .padding(.horizontal, 18).padding(.vertical, 10)
+                .glassEffect(.regular, in: .capsule)
+                Spacer(minLength: 12)
+                Button { Task { await model.undoLastApply() } } label: {
+                    Label("Undo", systemImage: "arrow.uturn.backward")
+                }
+                .buttonStyle(.glass)
+                .disabled(model.lastSnapshot == nil || !model.canChange)
+                Button {
+                    Task {
+                        if model.recoveryRequired { await model.undoLastApply() }
+                        else { await model.apply(to: [display.id]) }
+                    }
+                } label: {
+                    Text(model.recoveryRequired ? "Retry Recovery" : "Apply").frame(minWidth: 70)
+                }
+                .buttonStyle(.glassProminent)
+                .keyboardShortcut(.return, modifiers: .command)
+                .disabled(model.recoveryRequired ? model.isBusy : (!model.canChange || selectedCount == 0))
             }
-            .buttonStyle(.borderedProminent)
-            .keyboardShortcut(.return, modifiers: .command)
-            .disabled(model.recoveryRequired ? model.isBusy : (!model.canChange || selectedCount == 0))
+            .controlSize(.extraLarge)
         }
-        .controlSize(.large)
-        .padding(.horizontal, 16).padding(.vertical, 10)
-        .glassEffect(.regular, in: .rect(cornerRadius: 18))
-        .padding(.horizontal, 24).padding(.bottom, 14)
+        .padding(.horizontal, 24).padding(.vertical, 14)
     }
 
     private func openDisplaySettings() {
@@ -475,41 +446,187 @@ struct DisplayDetailView: View {
     }
 }
 
-// MARK: - Components
+// MARK: - Hero pieces
 
-/// A rounded panel with an optional title and trailing accessory.
-struct Card<Trailing: View, Content: View>: View {
-    var title: String?
+/// The hero background: a soft mesh gradient in each preset's own colours.
+struct HeroArtwork: View {
+    let useCase: UseCase
+
+    var body: some View {
+        let c = useCase.palette
+        MeshGradient(width: 3, height: 3, points: [
+            [0, 0], [0.5, 0], [1, 0],
+            [0, 0.5], [0.55, 0.45], [1, 0.5],
+            [0, 1], [0.5, 1], [1, 1]
+        ], colors: [
+            c[0], c[1], c[2],
+            c[1], c[2], c[0],
+            c[3], c[3], c[1]
+        ])
+        .overlay(LinearGradient(colors: [.clear, .black.opacity(0.35)], startPoint: .center, endPoint: .bottom))
+        .animation(.smooth(duration: 0.6), value: useCase)
+    }
+}
+
+extension UseCase {
+    /// Four colours that suggest what the preset is for.
+    var palette: [Color] {
+        switch self {
+        case .competitiveGaming: return [Color(red: 0.95, green: 0.25, blue: 0.2), Color(red: 1, green: 0.55, blue: 0.15), Color(red: 0.55, green: 0.1, blue: 0.3), Color(red: 0.2, green: 0.05, blue: 0.15)]
+        case .immersiveGaming: return [Color(red: 0.45, green: 0.25, blue: 0.95), Color(red: 0.2, green: 0.5, blue: 1), Color(red: 0.85, green: 0.3, blue: 0.75), Color(red: 0.1, green: 0.08, blue: 0.3)]
+        case .photoEditing: return [Color(red: 0.55, green: 0.6, blue: 0.62), Color(red: 0.75, green: 0.72, blue: 0.66), Color(red: 0.35, green: 0.42, blue: 0.48), Color(red: 0.15, green: 0.17, blue: 0.2)]
+        case .videoEditing: return [Color(red: 0.1, green: 0.35, blue: 0.6), Color(red: 0.95, green: 0.6, blue: 0.25), Color(red: 0.1, green: 0.2, blue: 0.35), Color(red: 0.05, green: 0.08, blue: 0.15)]
+        case .macbookLook: return [Color(red: 0.2, green: 0.45, blue: 1), Color(red: 0.95, green: 0.35, blue: 0.6), Color(red: 0.5, green: 0.3, blue: 0.95), Color(red: 0.1, green: 0.1, blue: 0.35)]
+        case .everyday: return [Color(red: 0.2, green: 0.6, blue: 0.95), Color(red: 0.35, green: 0.8, blue: 0.75), Color(red: 0.15, green: 0.4, blue: 0.75), Color(red: 0.05, green: 0.15, blue: 0.3)]
+        }
+    }
+}
+
+/// A small drawing of the monitor, its screen showing the preset's colours.
+private struct MonitorGlyph: View {
+    let display: DisplayFacts
+    let useCase: UseCase
+
+    var body: some View {
+        let aspect = display.nativePixels.map { Double($0.width) / Double(max($0.height, 1)) } ?? 16.0 / 9.0
+        VStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(LinearGradient(colors: Array(useCase.palette.prefix(3)), startPoint: .topLeading, endPoint: .bottomTrailing))
+                .overlay {
+                    Image(systemName: useCase.symbol).font(.system(size: 26, weight: .semibold)).foregroundStyle(.white.opacity(0.9))
+                }
+                .padding(5)
+                .background(Color.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .aspectRatio(aspect, contentMode: .fit)
+                .frame(width: 150)
+            if !display.isBuiltIn {
+                Rectangle().fill(.white.opacity(0.55)).frame(width: 18, height: 14)
+                Capsule().fill(.white.opacity(0.55)).frame(width: 56, height: 5)
+            }
+        }
+        .shadow(color: .black.opacity(0.3), radius: 12, y: 6)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct HeroTag: View {
+    let text: String
+    let symbol: String
+
+    var body: some View {
+        Label(text, systemImage: symbol)
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .glassEffect(.regular, in: .capsule)
+    }
+}
+
+private struct StatChip: View {
+    let title: String
+    let value: String
+    let symbol: String
+    let detail: String
+    var warn = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Label(title, systemImage: symbol).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(value).font(.title3.weight(.semibold).monospacedDigit())
+                .foregroundStyle(warn ? Color.orange : Color.primary)
+                .lineLimit(1).minimumScaleFactor(0.7)
+            Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .frame(minWidth: 130, alignment: .leading)
+        .glassEffect(.regular, in: .rect(cornerRadius: 18))
+    }
+}
+
+// MARK: - Sections
+
+struct SectionTitle: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text).font(.title2.weight(.bold))
+    }
+}
+
+/// A grouped, inset section like System Settings: a title above, rows on a
+/// rounded background, an optional footer below.
+struct GroupedSection<Trailing: View, Content: View>: View {
+    var title: String
+    var symbol: String?
+    var small = false
     var trailing: () -> Trailing
+    var footer: AnyView?
     var content: () -> Content
 
-    init(title: String? = nil, @ViewBuilder trailing: @escaping () -> Trailing, @ViewBuilder content: @escaping () -> Content) {
+    init(title: String, symbol: String? = nil, small: Bool = false, @ViewBuilder trailing: @escaping () -> Trailing,
+         footer: AnyView? = nil, @ViewBuilder content: @escaping () -> Content) {
         self.title = title
+        self.symbol = symbol
+        self.small = small
         self.trailing = trailing
+        self.footer = footer
         self.content = content
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if let title {
-                HStack {
-                    Text(title).font(.title3.weight(.semibold))
-                    Spacer()
-                    trailing()
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                if small {
+                    Label(title, systemImage: symbol ?? "circle").font(.headline).foregroundStyle(.secondary)
+                } else {
+                    SectionTitle(title)
                 }
+                Spacer()
+                trailing()
             }
-            content()
+            VStack(alignment: .leading, spacing: 0) { content() }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(nsColor: .controlBackgroundColor), in: .rect(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color(nsColor: .separatorColor).opacity(0.5)))
+            if let footer { footer.font(.callout).padding(.horizontal, 4) }
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color(nsColor: .separatorColor).opacity(0.6)))
     }
 }
 
-extension Card where Trailing == EmptyView {
-    init(title: String? = nil, @ViewBuilder content: @escaping () -> Content) {
-        self.init(title: title, trailing: { EmptyView() }, content: content)
+extension GroupedSection where Trailing == EmptyView {
+    init(title: String, symbol: String? = nil, small: Bool = false, footer: AnyView? = nil, @ViewBuilder content: @escaping () -> Content) {
+        self.init(title: title, symbol: symbol, small: small, trailing: { EmptyView() }, footer: footer, content: content)
+    }
+}
+
+/// A settings row: a coloured symbol tile, a title, and the control.
+private struct SettingRow<Control: View>: View {
+    let title: String
+    let symbol: String
+    @ViewBuilder var control: Control
+
+    var body: some View {
+        HStack(spacing: 12) {
+            SymbolTile(symbol: symbol)
+            Text(title)
+            Spacer(minLength: 16)
+            control
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+    }
+}
+
+/// The small rounded icon System Settings puts beside each row.
+struct SymbolTile: View {
+    let symbol: String
+    var color: Color = .accentColor
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 24, height: 24)
+            .background(color.gradient, in: .rect(cornerRadius: 6))
     }
 }
 
@@ -527,31 +644,9 @@ struct Badge: View {
     }
 }
 
-private struct Stat: View {
-    let title: String
-    let value: String
-    let symbol: String
-    let detail: String
-    let progress: Double?
-    var warn = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label(title, systemImage: symbol).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            Text(value).font(.title2.weight(.semibold).monospacedDigit()).foregroundStyle(warn ? Color.orange : Color.primary)
-                .lineLimit(1).minimumScaleFactor(0.7)
-            if let progress {
-                ProgressView(value: max(0, min(1, progress))).tint(warn ? Color.orange : Color.accentColor)
-            }
-            Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
-    }
-}
-
-struct ActivityTile: View {
+/// A preset as a card: artwork in the preset's colours, its symbol, title and
+/// what it will set.
+private struct PresetCard: View {
     let useCase: UseCase
     let selected: Bool
     let summary: String
@@ -560,31 +655,46 @@ struct ActivityTile: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Image(systemName: useCase.symbol).font(.title2)
-                        .foregroundStyle(selected ? Color.white : Color.accentColor)
-                        .frame(width: 36, height: 36)
-                        .background(selected ? Color.accentColor : Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 9))
-                    Spacer()
-                    if selected { Image(systemName: "checkmark.circle.fill").foregroundStyle(.tint) }
+            VStack(alignment: .leading, spacing: 0) {
+                ZStack(alignment: .topTrailing) {
+                    HeroArtwork(useCase: useCase)
+                        .frame(height: 78)
+                        .overlay {
+                            Image(systemName: useCase.symbol).font(.system(size: 28, weight: .semibold)).foregroundStyle(.white)
+                                .shadow(color: .black.opacity(0.3), radius: 4, y: 1)
+                        }
+                    if selected {
+                        Image(systemName: "checkmark")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 24, height: 24)
+                            .glassEffect(.regular.tint(.accentColor), in: .circle)
+                            .padding(8)
+                    }
                 }
-                Text(useCase.title).font(.headline)
-                Text(useCase.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2, reservesSpace: true)
-                if !summary.isEmpty {
-                    Text(summary).font(.caption.weight(.medium).monospacedDigit()).foregroundStyle(.tint).lineLimit(1)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(useCase.title).font(.headline).lineLimit(1)
+                    Text(useCase.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2, reservesSpace: true)
+                    if !summary.isEmpty {
+                        Text(summary).font(.caption.weight(.medium).monospacedDigit()).foregroundStyle(.tint).lineLimit(1)
+                    }
                 }
+                .padding(12)
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(RoundedRectangle(cornerRadius: 12))
-            .background(selected ? Color.accentColor.opacity(0.1) : Color.primary.opacity(hovered ? 0.06 : 0.03),
-                        in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? Color.accentColor : Color.clear, lineWidth: 2))
+            .frame(width: 196)
+            .background(Color(nsColor: .controlBackgroundColor))
+            .clipShape(.rect(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(selected ? Color.accentColor : Color(nsColor: .separatorColor).opacity(0.5), lineWidth: selected ? 2.5 : 1))
+            .shadow(color: .black.opacity(hovered ? 0.18 : 0.08), radius: hovered ? 10 : 4, y: hovered ? 4 : 2)
+            .scaleEffect(hovered ? 1.02 : 1)
+            .animation(.smooth(duration: 0.2), value: hovered)
+            .contentShape(.rect(cornerRadius: 16))
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
         .accessibilityLabel(useCase.title)
+        .accessibilityHint(summary)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
@@ -593,15 +703,15 @@ private struct ChangeRow: View {
     let change: PlannedChange
     @Binding var isOn: Bool
 
-    private var symbol: String {
+    private var symbol: (String, Color) {
         switch change.change {
-        case .mode: return "display"
-        case .colorProfile: return "paintpalette"
+        case .mode: return ("display", .blue)
+        case .colorProfile: return ("paintpalette.fill", .purple)
         case .ddc(let target):
-            if target.vcp == VCP.brightness { return "sun.max" }
-            if target.vcp == VCP.contrast { return "circle.lefthalf.filled" }
-            return "slider.horizontal.3"
-        case .nightShift: return "moon.stars"
+            if target.vcp == VCP.brightness { return ("sun.max.fill", .orange) }
+            if target.vcp == VCP.contrast { return ("circle.lefthalf.filled", .gray) }
+            return ("slider.horizontal.3", .teal)
+        case .nightShift: return ("moon.fill", .indigo)
         }
     }
 
@@ -618,9 +728,7 @@ private struct ChangeRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: symbol).font(.body.weight(.medium)).foregroundStyle(.tint)
-                .frame(width: 32, height: 32)
-                .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+            SymbolTile(symbol: symbol.0, color: symbol.1).padding(.top, 2)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(change.title).font(.headline)
@@ -635,12 +743,12 @@ private struct ChangeRow: View {
                     Text(after).fontWeight(.semibold).foregroundStyle(.tint)
                 }
                 .font(.callout.monospacedDigit())
-                Text(change.why).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Text(change.why).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 12)
             Toggle(change.title, isOn: $isOn).labelsHidden().toggleStyle(.switch)
         }
-        .padding(.vertical, 10)
+        .padding(.horizontal, 14).padding(.vertical, 12)
     }
 }
 
@@ -653,10 +761,11 @@ private struct StepRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Button(action: toggleDone) {
                     Image(systemName: done ? "checkmark.circle.fill" : "circle").font(.title3)
                         .foregroundStyle(done ? Color.green : Color.secondary)
+                        .contentTransition(.symbolEffect(.replace))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(done ? "Mark \(step.setting) as not done" : "Mark \(step.setting) as done")
@@ -670,7 +779,7 @@ private struct StepRow: View {
                 }
                 Spacer()
                 Button(action: toggleExpanded) {
-                    Image(systemName: expanded ? "chevron.up.circle" : "info.circle")
+                    Image(systemName: expanded ? "chevron.up" : "info.circle")
                 }
                 .buttonStyle(.plain).foregroundStyle(.secondary)
                 .help("Why")
@@ -685,8 +794,7 @@ private struct StepRow: View {
                 .padding(.leading, 34)
             }
         }
-        .padding(10)
-        .background(Color.primary.opacity(done ? 0.02 : 0.04), in: RoundedRectangle(cornerRadius: 10))
-        .opacity(done ? 0.75 : 1)
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .opacity(done ? 0.6 : 1)
     }
 }
