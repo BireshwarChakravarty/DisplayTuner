@@ -21,15 +21,29 @@ struct DisplayInspector: View {
                 }
             }
 
-            if let specs = rec.profile?.specs {
-                Section("Specifications") {
-                    LabeledContent("Panel", value: "\(specs.size) \(specs.panel.rawValue)")
-                    LabeledContent("Resolution", value: specs.native)
-                    LabeledContent("Refresh rate", value: specs.maxRefresh)
-                    LabeledContent("Colour", value: specs.gamut)
-                    if let nits = specs.peakSDRNits { LabeledContent("Rated brightness", value: "\(Int(nits)) cd/m²") }
-                    if let hdr = specs.hdr { LabeledContent("HDR", value: hdr) }
-                    if let vrr = specs.vrr { LabeledContent("Variable refresh", value: vrr) }
+            if let profile = rec.profile {
+                Section {
+                    ForEach(profile.facts) { fact in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(fact.label).font(.headline)
+                            Text(fact.value).fixedSize(horizontal: false, vertical: true)
+                            HStack(spacing: 6) {
+                                Text(fact.basis).foregroundStyle(.secondary)
+                                ForEach(fact.sourceIDs, id: \.self) { id in
+                                    if let source = profile.source(id), let url = URL(string: source.url) {
+                                        Link(destination: url) { Image(systemName: "link") }
+                                            .help(source.title)
+                                    }
+                                }
+                            }
+                            .font(.caption)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                } header: {
+                    Text("Confirmed Facts")
+                } footer: {
+                    Text("Each fact was read in its source. Measured figures name the model they were measured on.")
                 }
             }
 

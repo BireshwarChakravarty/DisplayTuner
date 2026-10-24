@@ -14,7 +14,7 @@ struct MenuBarView: View {
 
     private var externals: [DisplayFacts] { model.displays.filter { !$0.isBuiltIn } }
     private var mainDisplay: DisplayFacts? {
-        externals.first { $0.mirrorOf == nil } ?? model.displays.first
+        externals.first { $0.mirrorOf == nil && $0.isSupported }
     }
     private var canTap: Bool { model.canChange || model.isDemo }
 
@@ -56,7 +56,7 @@ struct MenuBarView: View {
     private var headline: String {
         if model.isBusy { return "Applying…" }
         if model.confirmation != nil { return "Confirm the new mode in the window" }
-        guard let display = mainDisplay else { return "No displays" }
+        guard let display = mainDisplay else { return "Acer XV272K V5 not connected" }
         let count = externals.count
         let screens = count == 1 ? "1 screen" : "\(count) screens"
         return "\(model.useCase(for: display.id).title) · \(screens)"
@@ -113,9 +113,9 @@ struct MenuBarView: View {
                 HStack {
                     Text("Presets").font(.subheadline.weight(.semibold))
                     Spacer()
-                    Text("All screens").font(.caption).foregroundStyle(.secondary)
+                    Text(mainDisplay?.name ?? "").font(.caption).foregroundStyle(.secondary)
                 }
-                HStack(alignment: .top, spacing: 0) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 4), alignment: .center, spacing: 10) {
                     ForEach(UseCase.allCases) { useCase in
                         PresetButton(useCase: useCase, selected: isCurrent(useCase),
                                      working: pendingPreset == useCase) {
@@ -171,15 +171,6 @@ struct MenuBarView: View {
             }
             .disabled(model.nightShiftEnabled == nil || model.isBusy)
 
-            ToggleTile(symbol: roomSymbol, title: "Room", value: model.lighting.title,
-                       on: true, tint: .yellow) {
-                let all = RoomLighting.allCases
-                let next = all[((all.firstIndex(of: model.lighting) ?? 0) + 1) % all.count]
-                model.lighting = next
-            }
-            .disabled(model.isBusy || model.confirmation != nil)
-            .help("How bright the room is. Editing presets follow it.")
-
             ToggleTile(symbol: "wand.and.stars", title: "Auto", value: autoEnabled ? "On" : "Off",
                        on: autoEnabled, tint: .accentColor) {
                 model.setAutoSwitch(enabled: !autoEnabled, gamePreset: AutoSwitchSettings.gamePreset)
@@ -187,14 +178,6 @@ struct MenuBarView: View {
             }
             .disabled(model.isDemo)
             .help("Switch presets for games and editing apps automatically.")
-        }
-    }
-
-    private var roomSymbol: String {
-        switch model.lighting {
-        case .dim: return "lightbulb"
-        case .normal: return "lightbulb.fill"
-        case .bright: return "sun.max.fill"
         }
     }
 
@@ -329,6 +312,7 @@ private func shortTitle(_ useCase: UseCase) -> String {
     case .photoEditing: return "Photo"
     case .videoEditing: return "Video"
     case .macbookLook: return "MacBook"
+    case .maxBrightness: return "Max"
     case .everyday: return "Everyday"
     }
 }
@@ -379,7 +363,6 @@ private struct BrightnessModule: View {
     @State private var dragging: Double?
 
     private var level: VCPValue? { display.ddc.values[VCP.brightness] }
-    private var peak: Double? { KnowledgeBase.match(name: display.name, vendorID: display.vendorID)?.specs.peakSDRNits }
 
     var body: some View {
         Module {
@@ -413,7 +396,6 @@ private struct BrightnessModule: View {
     private var readout: String {
         let percent = dragging.map { Int($0.rounded()) } ?? level?.percent
         guard let percent else { return display.name }
-        if let peak { return "≈\(Int((Double(percent) / 100 * peak).rounded())) nits · \(percent)%" }
         return "\(percent)%"
     }
 }

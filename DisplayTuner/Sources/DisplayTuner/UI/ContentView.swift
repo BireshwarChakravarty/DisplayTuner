@@ -70,7 +70,10 @@ struct ContentView: View {
                 } else {
                 switch model.section {
                 case .studio:
-                    if let display = model.selectedDisplay {
+                    if let display = model.selectedDisplay, !display.isSupported {
+                        ContentUnavailableView("Not Supported", systemImage: "display.trianglebadge.exclamationmark",
+                                               description: Text("Display Tuner is built for the Acer Nitro XV272K V5 and leaves \(display.name) alone."))
+                    } else if let display = model.selectedDisplay {
                         DisplayDetailView(display: display)
                     } else {
                         ContentUnavailableView("No Display Selected", systemImage: "display",
@@ -129,6 +132,7 @@ struct DisplayRow: View {
     }
 
     private var subtitle: String {
+        if !display.isSupported { return "Not supported" }
         if display.mirrorOf != nil { return "Mirroring" }
         let mode = display.currentMode?.refreshLabel ?? "Connected"
         return "\(useCase.title) · \(mode)"
@@ -172,4 +176,9 @@ struct ConfirmView: View {
         .padding(28)
         .frame(width: 360)
     }
+}
+
+extension DisplayFacts {
+    /// Display Tuner only changes the Acer Nitro XV272K V5.
+    var isSupported: Bool { KnowledgeBase.match(name: name, vendorID: vendorID) != nil }
 }

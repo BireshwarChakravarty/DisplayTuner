@@ -71,7 +71,7 @@ extension AppModel {
         let name = app.localizedName ?? "this app"
         if let wanted = preset(for: app) {
             if autoState?.useCase == wanted { autoState?.appName = name; return }
-            let targets = displays.filter { !$0.isBuiltIn && $0.mirrorOf == nil }
+            let targets = displays.filter { $0.isSupported && $0.mirrorOf == nil }
             guard !targets.isEmpty else { return }
             if autoState == nil {
                 autoBaseline = Dictionary(uniqueKeysWithValues: targets.map { ($0.id, useCase(for: $0.id)) })

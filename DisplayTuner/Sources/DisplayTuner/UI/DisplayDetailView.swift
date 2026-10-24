@@ -134,7 +134,6 @@ struct DisplayDetailView: View {
 
     private var specLine: String {
         var parts: [String] = []
-        if let specs = rec.profile?.specs { parts.append("\(specs.size) \(specs.panel.rawValue)") }
         if let master = display.mirrorOf {
             parts.append("Mirroring \(model.displays.first { $0.id == master }?.name ?? "another screen")")
         } else if let mode = display.currentMode {
@@ -151,7 +150,6 @@ struct DisplayDetailView: View {
 
     private var brightnessValue: String {
         guard let level = display.ddc.values[VCP.brightness] else { return display.ddc.isAvailable ? "—" : "Manual" }
-        if let peak = rec.profile?.specs.peakSDRNits { return "≈\(Int((Double(level.percent) / 100 * peak).rounded())) nits" }
         return "\(level.percent)%"
     }
 
@@ -177,14 +175,6 @@ struct DisplayDetailView: View {
             HStack(alignment: .firstTextBaseline) {
                 SectionTitle("What are you doing?")
                 Spacer()
-                Picker("Room", selection: $model.lighting) {
-                    Label("Dim", systemImage: "moon").tag(RoomLighting.dim)
-                    Label("Normal", systemImage: "lamp.desk").tag(RoomLighting.normal)
-                    Label("Bright", systemImage: "sun.max").tag(RoomLighting.bright)
-                }
-                .pickerStyle(.segmented).labelsHidden().fixedSize()
-                .disabled(!editable)
-                .help("How bright the room is. It sets the brightness target.")
             }
             ScrollView(.horizontal) {
                 HStack(spacing: 14) {
@@ -211,13 +201,11 @@ struct DisplayDetailView: View {
         }
         if !display.hasCalibration {
             let wide = display.primaries?.isWideGamut ?? rec.profile?.specs.isWideGamut ?? false
-            if option.isEditing && rec.profile?.specs.hasSRGBMode == true { parts.append("sRGB") }
+            if option.isEditing && rec.profile?.specs.hasSRGBColorSpace == true { parts.append("sRGB") }
             else if option == .macbookLook && wide { parts.append("P3 colour") }
             else { parts.append("Native colour") }
-            if display.ddc.values[VCP.brightness] != nil {
-                let nits = model.lighting.targetNits(for: option)
-                let peak = rec.profile?.specs.peakSDRNits
-                parts.append(peak.map { nits >= $0 } ?? false ? "Max brightness" : "\(Int(nits)) nits")
+            if option == .maxBrightness || option == .macbookLook, display.ddc.values[VCP.brightness] != nil {
+                parts.append("Brightness 100")
             }
         }
         return parts.joined(separator: " · ")
@@ -477,6 +465,7 @@ extension UseCase {
         case .photoEditing: return [Color(red: 0.55, green: 0.6, blue: 0.62), Color(red: 0.75, green: 0.72, blue: 0.66), Color(red: 0.35, green: 0.42, blue: 0.48), Color(red: 0.15, green: 0.17, blue: 0.2)]
         case .videoEditing: return [Color(red: 0.1, green: 0.35, blue: 0.6), Color(red: 0.95, green: 0.6, blue: 0.25), Color(red: 0.1, green: 0.2, blue: 0.35), Color(red: 0.05, green: 0.08, blue: 0.15)]
         case .macbookLook: return [Color(red: 0.2, green: 0.45, blue: 1), Color(red: 0.95, green: 0.35, blue: 0.6), Color(red: 0.5, green: 0.3, blue: 0.95), Color(red: 0.1, green: 0.1, blue: 0.35)]
+        case .maxBrightness: return [Color(red: 1, green: 0.85, blue: 0.35), Color(red: 1, green: 0.62, blue: 0.2), Color(red: 0.98, green: 0.95, blue: 0.85), Color(red: 0.45, green: 0.25, blue: 0.05)]
         case .everyday: return [Color(red: 0.2, green: 0.6, blue: 0.95), Color(red: 0.35, green: 0.8, blue: 0.75), Color(red: 0.15, green: 0.4, blue: 0.75), Color(red: 0.05, green: 0.15, blue: 0.3)]
         }
     }

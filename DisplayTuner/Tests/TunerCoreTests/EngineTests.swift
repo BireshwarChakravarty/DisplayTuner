@@ -107,8 +107,9 @@ final class KnowledgeBaseTests: XCTestCase {
         XCTAssertEqual(KnowledgeBase.match(name: "Acer XV272K", vendorID: 0)?.id, "acer-xv272k-v5")
     }
 
-    func testMatchesArzopa() {
-        XCTAssertEqual(KnowledgeBase.match(name: "ARZOPA", vendorID: 0)?.id, "arzopa-portable")
+    func testOnlyTheAcerIsKnown() {
+        XCTAssertEqual(KnowledgeBase.profiles.map(\.id), ["acer-xv272k-v5"])
+        XCTAssertNil(KnowledgeBase.match(name: "ARZOPA", vendorID: 0))
     }
 
     func testUnknownMonitor() {
@@ -117,11 +118,9 @@ final class KnowledgeBaseTests: XCTestCase {
 
     func testEveryCitedSourceExists() {
         for profile in KnowledgeBase.profiles {
-            for step in profile.osd {
-                for id in step.sourceIDs {
-                    XCTAssertTrue(profile.source(id) != nil || KnowledgeBase.generalSource(id) != nil,
-                                  "\(profile.id): missing source \(id)")
-                }
+            for id in profile.facts.flatMap(\.sourceIDs) + profile.osd.flatMap(\.sourceIDs) {
+                XCTAssertTrue(profile.source(id) != nil || KnowledgeBase.generalSource(id) != nil,
+                              "\(profile.id): missing source \(id)")
             }
             for source in profile.sources {
                 XCTAssertTrue(source.url.hasPrefix("https://"), source.url)
@@ -161,31 +160,39 @@ final class EngineTests: XCTestCase {
         XCTAssertEqual(mode.width, 2560)
     }
 
-    func testPhotoEditingUsesSRGBModeAndProfile() throws {
+    func testPhotoEditingUsesSRGBColorSpaceAndProfile() throws {
         let acer = Fixtures.acer()
         let rec = RecommendationEngine.recommend(.photoEditing, for: acer, context: context([acer]))
 
         guard case .colorProfile(let choice) = try XCTUnwrap(change("profile", in: rec)).change else { return XCTFail() }
         XCTAssertEqual(choice, .system(ProfileChoice.sRGBFile))
-        XCTAssertTrue(rec.manualSteps.contains { $0.setting == "Mode" && $0.value == "sRGB" })
+        XCTAssertTrue(rec.manualSteps.contains { $0.setting == "Color Space" && $0.value == "sRGB" && $0.path.contains("Color → Color Space") })
 
-        // 120 cd/m² on a 400 cd/m² panel ≈ 30%.
-        guard case .ddc(let brightness) = try XCTUnwrap(change("ddc-brightness", in: rec)).change else { return XCTFail() }
-        XCTAssertEqual(brightness.value, .percent(30))
-
-        guard case .ddc(let contrast) = try XCTUnwrap(change("ddc-contrast", in: rec)).change else { return XCTFail() }
-        XCTAssertEqual(contrast.value, .percent(50))
+        // The V5's brightness curve isn't published, so editing brightness is
+        // left to the person and contrast is never written.
+        XCTAssertNil(change("ddc-brightness", in: rec))
+        XCTAssertNil(change("ddc-contrast", in: rec))
+        XCTAssertTrue(rec.notes.contains { $0.contains("120 cd/m²") && $0.contains("colorimeter") })
 
         let nightShift = try XCTUnwrap(change("night-shift", in: rec))
         XCTAssertEqual(nightShift.change, .nightShift(enabled: false))
         XCTAssertTrue(rec.manualSteps.contains { $0.setting == "Switchboard brightness" })
     }
 
-    func testDimRoomLowersEditingBrightness() throws {
+    func testOnlyBrightPresetsChangeBrightnessAndOnlyTo100() throws {
         let acer = Fixtures.acer()
-        let rec = RecommendationEngine.recommend(.photoEditing, for: acer, context: context([acer], lighting: .dim))
-        guard case .ddc(let brightness) = try XCTUnwrap(change("ddc-brightness", in: rec)).change else { return XCTFail() }
-        XCTAssertEqual(brightness.value, .percent(23)) // 90 / 400
+        for useCase in UseCase.allCases {
+            let rec = RecommendationEngine.recommend(useCase, for: acer, context: context([acer]))
+            let brightness = change("ddc-brightness", in: rec)
+            if useCase == .maxBrightness || useCase == .macbookLook {
+                guard case .ddc(let target) = try XCTUnwrap(brightness).change else { return XCTFail() }
+                XCTAssertEqual(target.value, .percent(100))
+                XCTAssertTrue(rec.manualSteps.contains { $0.setting == "Max Brightness" && $0.value == "On" })
+            } else {
+                XCTAssertNil(brightness, "\(useCase)")
+            }
+            XCTAssertNil(change("ddc-contrast", in: rec), "\(useCase)")
+        }
     }
 
     func testVideoEditingPicks120Hz() throws {
@@ -200,27 +207,19 @@ final class EngineTests: XCTestCase {
         let rec = RecommendationEngine.recommend(.immersiveGaming, for: acer, context: context([acer]))
         guard case .colorProfile(let choice) = try XCTUnwrap(change("profile", in: rec)).change else { return XCTFail() }
         XCTAssertEqual(choice, .factory)
-        XCTAssertTrue(rec.manualSteps.contains { $0.setting == "Mode" && $0.value.hasPrefix("Standard") })
+        XCTAssertTrue(rec.manualSteps.contains { $0.setting == "Modes" && $0.value == "Standard" })
     }
 
-    func testMacBookLookIsBrightNativeGamutAndAccurate() throws {
+    func testMacBookLookIsBrightNativeGamut() throws {
         let acer = Fixtures.acer(customProfile: "/System/Library/ColorSync/Profiles/sRGB Profile.icc")
         let rec = RecommendationEngine.recommend(.macbookLook, for: acer, context: context([acer]))
 
         // The display's own profile (native wide gamut), not sRGB.
         guard case .colorProfile(let choice) = try XCTUnwrap(change("profile", in: rec)).change else { return XCTFail() }
         XCTAssertEqual(choice, .factory)
-        XCTAssertTrue(rec.manualSteps.contains { $0.setting == "Mode" && $0.value.hasPrefix("Standard") })
+        XCTAssertTrue(rec.manualSteps.contains { $0.setting == "Color Space" && $0.value == "General" })
         XCTAssertTrue(rec.manualSteps.contains { $0.setting == "Gamma" && $0.value == "2.2" })
         XCTAssertTrue(rec.manualSteps.contains { $0.setting == "High Dynamic Range" && $0.value == "Off" })
-
-        // 350 cd/m² on a 400 cd/m² panel ≈ 88%; a bright room gets all of it.
-        guard case .ddc(let brightness) = try XCTUnwrap(change("ddc-brightness", in: rec)).change else { return XCTFail() }
-        XCTAssertEqual(brightness.value, .percent(88))
-        let bright = RecommendationEngine.recommend(.macbookLook, for: acer, context: context([acer], lighting: .bright))
-        guard case .ddc(let full) = try XCTUnwrap(change("ddc-brightness", in: bright)).change else { return XCTFail() }
-        XCTAssertEqual(full.value, .percent(100))
-
         XCTAssertNotNil(change("night-shift", in: rec))
         XCTAssertTrue(rec.notes.contains { $0.contains("224 pixels per inch") })
     }
@@ -233,18 +232,18 @@ final class EngineTests: XCTestCase {
         }
     }
 
-    func testMirroredArzopaIsNotGivenModeChangesAndWarnsGamers() {
+    func testOtherScreensAreLeftAlone() {
         let acer = Fixtures.acer()
         let arzopa = Fixtures.arzopa()
         let all = [acer, arzopa]
-
-        let arzopaRec = RecommendationEngine.recommend(.competitiveGaming, for: arzopa, context: context(all))
-        XCTAssertNil(change("mode", in: arzopaRec))
-        XCTAssertTrue(arzopaRec.notes.contains { $0.contains("Mirrors XV272K V5") })
-        XCTAssertTrue(arzopaRec.changes.allSatisfy { if case .ddc = $0.change { return false }; return true })
-
+        for useCase in UseCase.allCases {
+            let rec = RecommendationEngine.recommend(useCase, for: arzopa, context: context(all))
+            XCTAssertNil(rec.profile)
+            XCTAssertTrue(rec.changes.isEmpty)
+            XCTAssertTrue(rec.manualSteps.isEmpty)
+        }
         let acerRec = RecommendationEngine.recommend(.competitiveGaming, for: acer, context: context(all))
-        XCTAssertTrue(acerRec.warnings.contains { $0.contains("ARZOPA") && $0.contains("Switchboard") })
+        XCTAssertTrue(acerRec.notes.contains { $0.contains("ARZOPA mirrors this screen") })
     }
 
     func testNoDDCMeansNoHardwareChanges() {
@@ -254,18 +253,6 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(rec.notes.contains { $0.contains("DDC/CI") })
     }
 
-    func testUnknownWideGamutMonitorGetsGenericAdvice() {
-        var other = Fixtures.acer()
-        other.name = "Some Monitor"
-        other.vendorID = 0x1111
-        other.ddc = .available([VCP.colorPreset: VCPValue(current: 2, max: 11), VCP.brightness: VCPValue(current: 50, max: 100)])
-        let rec = RecommendationEngine.recommend(.photoEditing, for: other, context: context([other]))
-        XCTAssertNil(rec.profile)
-        XCTAssertNil(change("profile", in: rec)) // already on its own profile
-        XCTAssertTrue(rec.warnings.contains { $0.contains("wide-gamut") })
-        XCTAssertNil(change("ddc-preset", in: rec))
-        XCTAssertTrue(rec.manualSteps.contains { $0.setting == "Picture mode" })
-    }
 }
 
 final class DDCPacketTests: XCTestCase {

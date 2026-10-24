@@ -1,6 +1,6 @@
 import Foundation
 
-/// Where a recommendation comes from.
+/// Where a fact comes from.
 public struct Source: Hashable, Codable, Sendable, Identifiable {
     public var id: String
     public var title: String
@@ -13,35 +13,36 @@ public struct Source: Hashable, Codable, Sendable, Identifiable {
     }
 }
 
-public enum PanelTech: String, Codable, Sendable {
-    case ips = "IPS"
-    case va = "VA"
-    case tn = "TN"
-    case oled = "OLED"
-    case miniLED = "Mini-LED IPS"
-    case unknown = "Unknown"
-}
-
 public enum DDCSupport: String, Codable, Sendable {
     case supported, notSupported, unknown
 }
 
-/// Published facts about one monitor model.
+/// What the engine needs to know about the monitor's own controls.
 public struct MonitorSpecs: Hashable, Codable, Sendable {
-    public var panel: PanelTech
-    public var size: String
-    public var native: String
-    public var maxRefresh: String
-    public var gamut: String
+    /// The monitor offers an sRGB colour space in its own menu.
+    public var hasSRGBColorSpace: Bool
+    /// Only a fallback for when macOS can't read the panel's primaries.
     public var isWideGamut: Bool
-    public var peakSDRNits: Double?
-    public var hdr: String?
-    public var vrr: String?
-    /// Has a picture mode that clamps the panel to sRGB.
-    public var hasSRGBMode: Bool
-    /// Factory contrast (the setting that doesn't clip whites).
-    public var defaultContrast: Int?
     public var ddc: DDCSupport
+}
+
+/// One researched fact, with the model it was confirmed on (when that isn't
+/// the V5 itself) and its sources.
+public struct Fact: Hashable, Codable, Sendable, Identifiable {
+    public var label: String
+    public var value: String
+    /// "Measured on the XV272K V3", "Acer's XV275K manual", …
+    public var basis: String
+    public var sourceIDs: [String]
+
+    public var id: String { label }
+
+    public init(_ label: String, _ value: String, basis: String, sources: [String]) {
+        self.label = label
+        self.value = value
+        self.basis = basis
+        self.sourceIDs = sources
+    }
 }
 
 /// A setting that only the monitor's own on-screen menu can change.
@@ -55,7 +56,7 @@ public struct OSDStep: Hashable, Codable, Sendable {
     public var sourceIDs: [String]
 }
 
-/// A monitor model with researched settings.
+/// The monitor and everything confirmed about it.
 public struct MonitorProfile: Hashable, Codable, Sendable, Identifiable {
     public var id: String
     public var displayName: String
@@ -64,17 +65,20 @@ public struct MonitorProfile: Hashable, Codable, Sendable, Identifiable {
     /// EDID manufacturer IDs (CGDisplayVendorNumber), used only to break ties.
     public var vendorIDs: [UInt32]
     public var specs: MonitorSpecs
+    public var facts: [Fact]
     public var osd: [OSDStep]
     public var notes: [String]
     public var sources: [Source]
-    /// How sure the research is and what wasn't confirmed.
+    /// How sure the research is and what couldn't be confirmed.
     public var confidence: String
 
     public func source(_ id: String) -> Source? { sources.first { $0.id == id } }
 }
 
-/// The research database. It starts with the monitors on this desk; any other
-/// display gets settings derived from what it reports about itself.
+/// The research behind Display Tuner. It covers one monitor, the Acer Nitro
+/// XV272K V5. Every fact below was read in the cited source; where the V5's
+/// own documentation couldn't be obtained, the fact names the sibling model
+/// it comes from.
 public enum KnowledgeBase {
     public static func match(name: String, vendorID: UInt32) -> MonitorProfile? {
         let lower = name.lowercased()
@@ -83,203 +87,210 @@ public enum KnowledgeBase {
         return hits.first
     }
 
-    public static let profiles: [MonitorProfile] = [acerXV272KV5, arzopaPortable]
+    public static let profiles: [MonitorProfile] = [acerXV272KV5]
 
     // MARK: Acer Nitro XV272K V5
 
     /// EDID manufacturer "ACR".
     static let acerVendorID: UInt32 = 0x0472
 
+    /// Use cases that want the panel's native colour and full brightness range.
+    private static let native: Set<UseCase> = [.competitiveGaming, .immersiveGaming, .macbookLook, .maxBrightness, .everyday]
+    private static let editing: Set<UseCase> = [.photoEditing, .videoEditing]
+
     public static let acerXV272KV5 = MonitorProfile(
         id: "acer-xv272k-v5",
         displayName: "Acer Nitro XV272K V5",
         namePatterns: ["xv272k"],
         vendorIDs: [acerVendorID],
-        specs: MonitorSpecs(
-            panel: .ips,
-            size: "27 in",
-            native: "3840 × 2160",
-            maxRefresh: "160 Hz at 4K; 320 Hz at 1080p with DFR (dual mode)",
-            gamut: "Wide: about 90–95% DCI-P3 (≈130% sRGB), with an sRGB mode",
-            isWideGamut: true,
-            peakSDRNits: 400,
-            hdr: "VESA DisplayHDR 400 (no local dimming)",
-            vrr: "AMD FreeSync Premium / Adaptive-Sync",
-            hasSRGBMode: true,
-            defaultContrast: 50,
-            ddc: .supported
-        ),
+        specs: MonitorSpecs(hasSRGBColorSpace: true, isWideGamut: true, ddc: .supported),
+        facts: [
+            Fact("HDR certification", "VESA DisplayHDR 400 (CTS 1.1)",
+                 basis: "VESA's list of certified products names the XV272K V5",
+                 sources: ["vesa-displayhdr-list"]),
+            Fact("4K at 160 Hz", "DisplayPort or USB-C only; set System → Max Refresh Rate to 160Hz",
+                 basis: "Acer's XV275K manual, the closest model with the same DFR switch",
+                 sources: ["acer-manual-xv275k"]),
+            Fact("DFR", "Switches between 3840 × 2160 at 160 Hz and 1920 × 1080 at 320 Hz",
+                 basis: "Acer's XV275K manual", sources: ["acer-manual-xv275k"]),
+            Fact("Max Brightness", "Picture menu, Off by default: \"The default brightness is set to a low level to save energy\"",
+                 basis: "Acer's XV275K manual", sources: ["acer-manual-xv275k"]),
+            Fact("Max Brightness Off vs On", "Brightness 100 gave 139 cd/m² Off and 280 cd/m² On",
+                 basis: "Measured on the XV282K KV", sources: ["pcmonitors-xv282k"]),
+            Fact("Brightness range", "40.1 cd/m² at Brightness 0 to 388.7 cd/m² at Brightness 100",
+                 basis: "Measured on the XV272K V3", sources: ["danawa-xv272kv3"]),
+            Fact("Static contrast", "1043:1 at Brightness 100",
+                 basis: "Measured on the XV272K V3", sources: ["danawa-xv272kv3"]),
+            Fact("Native gamut", "94.52% of P3 and 99.96% of sRGB in the default mode",
+                 basis: "Measured on the XV272K V3", sources: ["danawa-xv272kv3"]),
+            Fact("HDR peak", "332 cd/m² on a 10% window, below the 388.7 cd/m² SDR maximum",
+                 basis: "Measured on the XV272K V3", sources: ["danawa-xv272kv3"]),
+            Fact("Colour Space", "General by default; sRGB, Rec.709, DCI, EBU, SMPTE-C and HDR also offered",
+                 basis: "Acer's XV275K manual", sources: ["acer-manual-xv275k"]),
+            Fact("sRGB accuracy", "Average ΔE00 1.03 in the sRGB colour space (3.04 in the default mode)",
+                 basis: "Measured on the XV272K V3", sources: ["danawa-xv272kv3"]),
+            Fact("Gamma", "2.2 by default", basis: "Acer's XV275K manual", sources: ["acer-manual-xv275k"]),
+            Fact("Colour Temp.", "Warm by default; measured 6067 K at default",
+                 basis: "Acer's XV275K manual; measured on the XV272K V3",
+                 sources: ["acer-manual-xv275k", "danawa-xv272kv3"]),
+            Fact("Contrast", "50 by default; calibrations used 48–49",
+                 basis: "Measured on the XV273K; calibrations of the XV272U KV, VX282K and XV273K",
+                 sources: ["tftcentral-xv273k", "tomshw-xv272u"]),
+            Fact("Over Drive overshoot", "Off 0%, Normal 13.7%, Extreme 85.5% (response 5.2 / 3 / 1.7 ms)",
+                 basis: "Measured on the XV272K V3 at 160 Hz", sources: ["danawa-xv272kv3"]),
+            Fact("ACM", "Dynamic contrast, Off by default", basis: "Acer's XV275K and XV272U V manuals",
+                 sources: ["acer-manual-xv275k", "acer-manual-xv272uv"])
+        ],
         osd: [
             OSDStep(
-                useCases: [.competitiveGaming, .immersiveGaming, .macbookLook, .everyday],
-                setting: "Mode", value: "Standard (or User)",
-                path: "Menu → Color (or Picture) → Mode",
-                why: "Uses the full wide gamut and unlocks brightness. Must match the colour profile this preset sets (the monitor's own).",
-                sourceIDs: ["displayninja-xv272u"]),
+                useCases: native,
+                setting: "Color Space", value: "General",
+                path: "Menu → Color → Color Space",
+                why: "General is the factory default and keeps the panel's native colour, which the display's own profile in macOS describes. Acer: any Color Space other than HDR sets Modes to Standard.",
+                sourceIDs: ["acer-manual-xv275k"]),
             OSDStep(
-                useCases: [.photoEditing, .videoEditing],
-                setting: "Mode", value: "sRGB",
-                path: "Menu → Color (or Picture) → Mode",
-                why: "Clamps the ~130% sRGB native gamut to sRGB, so games, web and other unmanaged content show true colours. Acer lists it as factory-calibrated (Delta E < 1). This preset assigns the matching sRGB profile in macOS.",
-                sourceIDs: ["acer-store", "acer-manual", "displayninja-xv272u"]),
-            OSDStep(
-                useCases: [.competitiveGaming, .immersiveGaming, .macbookLook, .everyday],
-                setting: "Over Drive", value: "Normal",
-                path: "Menu → Gaming → Over Drive",
-                why: "Extreme adds visible overshoot (inverse ghosting) on this Acer IPS family, and Acer forces Normal whenever Adaptive-Sync is on anyway.",
-                sourceIDs: ["acer-manual", "displayninja-xv272u", "blurbusters-xv272"]),
-            OSDStep(
-                useCases: [.competitiveGaming, .immersiveGaming, .macbookLook, .everyday],
-                setting: "Adaptive-Sync / FreeSync Premium", value: "On",
-                path: "Menu → Gaming → Adaptive-Sync",
-                why: "Needed before macOS offers a Variable refresh rate for this screen.",
-                sourceIDs: ["acer-manual", "apple-vrr"]),
-            OSDStep(
-                useCases: [.competitiveGaming],
-                setting: "Black Boost", value: "Off, or a low level if dark corners hide enemies",
-                path: "Menu → Picture (or Gaming) → Black Boost",
-                why: "Lifts shadow detail for visibility at the cost of contrast; it is a visibility aid, not an image-quality setting.",
-                sourceIDs: ["itechguides-nitro"]),
-            OSDStep(
-                useCases: [.immersiveGaming, .photoEditing, .videoEditing, .macbookLook, .everyday],
-                setting: "Black Boost", value: "Off / 0",
-                path: "Menu → Picture (or Gaming) → Black Boost",
-                why: "Any boost raises blacks and flattens contrast, which skews grading and shadow detail.",
-                sourceIDs: ["itechguides-nitro"]),
-            OSDStep(
-                useCases: [.macbookLook],
-                setting: "Colour Temp", value: "Normal (try Warm if whites look bluer than your MacBook's)",
-                path: "Menu → Color → Color Temp",
-                why: "Apple's displays are set to D65 (6500 K). Reviews of this Nitro family measured the default close to that (about 6200–6600 K). Cool looks blue next to a Mac. For a side-by-side check, turn True Tone off on the MacBook.",
-                sourceIDs: ["pcworld-xv272", "rtings-xv272u"]),
-            OSDStep(
-                useCases: [.macbookLook],
-                setting: "Gamma", value: "2.2",
-                path: "Menu → Color → Gamma",
-                why: "The tone curve macOS and Apple's displays use. Other values make midtones look flat or heavy.",
-                sourceIDs: ["rtings-xv272u"]),
-            OSDStep(
-                useCases: [.macbookLook],
-                setting: "Saturation / 6-axis colour", value: "Default",
-                path: "Menu → Color",
-                why: "The vivid look comes from the panel's wide gamut shown accurately. Raising saturation pushes skin tones and skies past what a MacBook shows.",
-                sourceIDs: []),
-            OSDStep(
-                useCases: [.competitiveGaming],
-                setting: "DFR (dual mode)", value: "On only if you want 1080p @ 320 Hz",
-                path: "Menu → Gaming → DFR",
-                why: "Halves the resolution in exchange for twice the refresh rate. Leave it off otherwise; 4K @ 160 Hz is sharper.",
-                sourceIDs: ["acer-store"]),
+                useCases: editing,
+                setting: "Color Space", value: "sRGB",
+                path: "Menu → Color → Color Space",
+                why: "Clamps the panel to sRGB, matching the sRGB profile the app assigns. On the XV272K V3 it measured an average ΔE00 of 1.03. Sibling reviews found Contrast, Gamma and Colour Temp. locked in this colour space, while Brightness stays adjustable.",
+                sourceIDs: ["acer-manual-xv275k", "danawa-xv272kv3", "pcmonitors-xv282k"]),
             OSDStep(
                 useCases: Set(UseCase.allCases),
-                setting: "Dynamic contrast, ACM, Light Sense, Eco modes", value: "Off",
-                path: "Menu → Picture",
-                why: "They change brightness on their own, so neither games nor edits look consistent. Auto-brightness and Eco modes are also known causes of flicker with Macs.",
-                sourceIDs: ["displaybuddy-flicker"]),
+                setting: "Modes", value: "Standard",
+                path: "Menu → Color → Modes (or Hot Key 2)",
+                why: "Acer's factory default (\"Hot key2 (default: Standard mode)\"). Choosing a Color Space other than HDR returns Modes to Standard.",
+                sourceIDs: ["acer-manual-xv275k"]),
+            OSDStep(
+                useCases: native,
+                setting: "Max Brightness", value: "On",
+                path: "Menu → Picture → Max Brightness",
+                why: "Off by default to save energy, which caps the backlight: on the XV282K, Brightness 100 gave 139 cd/m² with it Off and 280 with it On. If your Picture menu has no Max Brightness item, skip this.",
+                sourceIDs: ["acer-manual-xv275k", "pcmonitors-xv282k"]),
+            OSDStep(
+                useCases: Set(UseCase.allCases),
+                setting: "ACM", value: "Off",
+                path: "Menu → Picture → ACM",
+                why: "ACM is Acer's dynamic contrast: it adjusts \"based on the current screen\". It's off by default, and PCMonitors found it biased towards high brightness on mixed content.",
+                sourceIDs: ["acer-manual-xv272uv", "acer-manual-xv275k", "pcmonitors-xv282k"]),
+            OSDStep(
+                useCases: Set(UseCase.allCases).subtracting([.competitiveGaming]),
+                setting: "Black Boost", value: "0",
+                path: "Menu → Picture → Black Boost",
+                why: "Acer: Black Boost \"enhance[s] shadows by increasing the brightness without changing the lighter areas\". At 0, shadows are shown as the signal has them.",
+                sourceIDs: ["acer-manual-xv275k"]),
+            OSDStep(
+                useCases: [.competitiveGaming],
+                setting: "Black Boost", value: "0, or higher if dark areas hide detail",
+                path: "Menu → Picture → Black Boost",
+                why: "Acer: Black Boost \"enhance[s] shadows by increasing the brightness without changing the lighter areas\" (scale 0–10). It trades shadow depth for visibility.",
+                sourceIDs: ["acer-manual-xv275k"]),
+            OSDStep(
+                useCases: Set(UseCase.allCases),
+                setting: "HDR", value: "Off",
+                path: "Menu → Picture → HDR",
+                why: "For standard-range content. The options are Off and Auto; with HDR on, Acer greys out Contrast, Gamma, ACM and Black Boost.",
+                sourceIDs: ["acer-manual-xv275k"]),
+            OSDStep(
+                useCases: native,
+                setting: "Gamma", value: "2.2",
+                path: "Menu → Color → Gamma",
+                why: "Acer's factory default.",
+                sourceIDs: ["acer-manual-xv275k"]),
+            OSDStep(
+                useCases: native,
+                setting: "Color Temp.", value: "Warm (factory default)",
+                path: "Menu → Color → Color Temp.",
+                why: "Acer's default. The XV272K V3 measured 6067 K at default, a little warmer than the D65 (about 6500 K) white of sRGB and Display P3. Normal and Cool weren't measured in any review found, so the app doesn't recommend them.",
+                sourceIDs: ["acer-manual-xv275k", "danawa-xv272kv3", "apple-display-p3"]),
+            OSDStep(
+                useCases: native,
+                setting: "Over Drive", value: "Normal",
+                path: "Menu → Gaming → Over Drive",
+                why: "On the XV272K V3 at 160 Hz, Normal overshot 13.7% for a 3 ms response and Extreme 85.5% for 1.7 ms. Large overshoot shows as trails behind moving objects. TFTCentral found Extreme best on the XV273K at 120–144 Hz, so it may be worth trying.",
+                sourceIDs: ["danawa-xv272kv3", "tftcentral-xv273k"]),
+            OSDStep(
+                useCases: native,
+                setting: "Variable Refresh Rate", value: "On",
+                path: "Menu → Gaming → Variable Refresh Rate",
+                why: "Lets a source that supports Adaptive-Sync vary the refresh rate. On older XV272 models (FreeSync Premium in the menu), turning it on locks Over Drive to Normal.",
+                sourceIDs: ["acer-manual-xv275k", "acer-manual-xv272uv"]),
+            OSDStep(
+                useCases: Set(UseCase.allCases),
+                setting: "Max Refresh Rate", value: "160Hz",
+                path: "Menu → System → Max Refresh Rate",
+                why: "Acer: \"Setting max refresh rate to select OSD Menu > System > Max Refresh Rate > 160Hz.\" 4K at 160 Hz works over DisplayPort or USB-C.",
+                sourceIDs: ["acer-manual-xv275k"]),
+            OSDStep(
+                useCases: [.competitiveGaming],
+                setting: "DFR", value: "On only for 1080p at 320 Hz",
+                path: "Menu → System → DFR (or the DFR hot key)",
+                why: "Acer: \"DFR: Switch UHD 160Hz & FHD 320Hz resolution.\" It halves the resolution for twice the refresh rate.",
+                sourceIDs: ["acer-manual-xv275k"]),
+            OSDStep(
+                useCases: Set(UseCase.allCases),
+                setting: "DSC", value: "On (factory default)",
+                path: "Menu → System → DSC",
+                why: "Acer: with DSC Off the monitor \"may not be able to display 4K-(144/146)Hz\".",
+                sourceIDs: ["acer-manual-xv275k"]),
             OSDStep(
                 useCases: Set(UseCase.allCases),
                 setting: "DDC/CI", value: "On",
                 path: "Menu → System → DDC/CI",
-                why: "Lets this app (and Switchboard) set brightness and contrast for you.",
-                sourceIDs: ["m1ddc"])
+                why: "Acer: \"Support monitor settings through software on your PC.\" Display Tuner uses it for brightness and contrast only.",
+                sourceIDs: ["acer-manual-xv275k"])
         ],
         notes: [
-            "Connect it with a USB-C/Thunderbolt-to-DisplayPort cable for Variable refresh. Apple advises against HDMI for Adaptive-Sync.",
-            "It accepts DDC/CI but ignores the factory-reset commands, so contrast is set to its factory 50 directly.",
-            "In sRGB mode some monitors lock brightness. After you apply, the app reads it back and tells you."
+            "Display Tuner changes only brightness and contrast over DDC/CI. Acer's manual warns: \"Adjust only those controls that are covered by the operating instructions, since improper adjustment of other controls may result in damage.\"",
+            "No instrumented review of the XV272K V5 itself exists yet, so measured figures come from its siblings, the XV272K V3 above all, and are labelled with the model."
         ],
         sources: [
-            Source(id: "acer-store", title: "Acer Store: Nitro XV272K V5 (160 Hz UHD, 320 Hz FHD via DFR, Delta E < 1)",
-                   url: "https://store.acer.com/en-in/acer-nitro-xv272k-v5-27-inch-uhd-3840x2160-ips-agile-splendor-gaming-monitor-160hz-refresh-delta-e-1-fhd-320hz-through-dfr-g-sync-freesync-compatible-smart-dial-eyesafe-certified-black"),
-            Source(id: "shi-spec", title: "SHI: Acer Nitro XV272K V5bmiiprx spec sheet",
-                   url: "https://www.shi.com/product/49740911/Acer-Nitro-XV272K-V5bmiiprx"),
-            Source(id: "acer-manual", title: "Acer Nitro XV-series user guide (Over Drive, Adaptive-Sync, sRGB mode)",
+            Source(id: "vesa-displayhdr-list", title: "VESA: DisplayHDR certified products (Acer XV272K V5 under DisplayHDR 400)",
+                   url: "https://displayhdr.org/certified-products/"),
+            Source(id: "acer-manual-xv275k", title: "Acer XV275K user guide, 2024 (closest model with the V5's DFR switch)",
+                   url: "https://global-download.acer.com/GDFiles/Document/User%20Manual/User%20Manual_Acer_1.0_A_A.pdf?acerid=638769326554563998&Step1=&Step2=&Step3=XV275KP5&OS=ALL&LC=en&BC=ACER&SC=PA_6"),
+            Source(id: "acer-manual-xv272kv3", title: "Acer XV272K V3 user guide, 2023 (Japanese)",
+                   url: "https://global-download.acer.com/GDFiles/Document/User%20Manual/User%20Manual_Acer_1.0_A_A.pdf?acerid=638373664951374988&Step1=&Step2=&Step3=XV272KV3&OS=ALL&LC=en&BC=ACER&SC=PA_6"),
+            Source(id: "acer-manual-xv272uv", title: "Acer XV272U V user guide, 2018",
                    url: "https://global-download.acer.com/GDFiles/Document/User%20Manual/User%20Manual_Acer_1.0_A_A.pdf?acerid=637376339193437048&Step1=MONITOR&Step2=XV+SERIES&Step3=XV272UV&OS=ALL&LC=en&BC=ACER&SC=PA_6"),
-            Source(id: "displayninja-xv272u", title: "DisplayNinja: Acer XV272U review (Overdrive, sRGB clamp)",
-                   url: "https://www.displayninja.com/acer-xv272u-review/"),
-            Source(id: "tomshw-xv272u", title: "Tom's Hardware: Acer Nitro XV272U review",
+            Source(id: "danawa-xv272kv3", title: "CoolEnjoy / Danawa: Acer XV272K V3 measured review (Korean)",
+                   url: "https://dpg.danawa.com/news/view?boardSeq=62&listSeq=5612150"),
+            Source(id: "pcmonitors-xv282k", title: "PCMonitors: Acer XV282K KV review (Max Brightness, ACM, sRGB)",
+                   url: "https://pcmonitors.info/reviews/acer-xv282k-kv/"),
+            Source(id: "tftcentral-xv273k", title: "TFTCentral: Acer Nitro XV273K review (defaults, Over Drive)",
+                   url: "https://tftcentral.co.uk/reviews/acer_nitro_xv273k.htm"),
+            Source(id: "tomshw-xv272u", title: "Tom's Hardware: Acer Nitro XV272U KV review (calibrated settings)",
                    url: "https://www.tomshardware.com/reviews/acer-nitro-xv272u-kvbmiiprzx-review"),
-            Source(id: "blurbusters-xv272", title: "Blur Busters forum: Acer XV272 hands-on (VRR with Over Drive)",
-                   url: "https://forums.blurbusters.com/viewtopic.php?t=11054"),
-            Source(id: "pcworld-xv272", title: "PCWorld: Acer Nitro XV272 review (default colour temperature ≈6200 K)",
-                   url: "https://www.pcworld.com/article/701844/acer-nitro-xv272-review-top-tier-gaming-on-a-1080p-monitor.html"),
-            Source(id: "rtings-xv272u", title: "RTINGS: Acer Nitro XV272U KVbmiiprzx (≈6550 K, gamma 2.2 after calibration)",
-                   url: "https://www.rtings.com/monitor/tools/compare/acer-nitro-xv272u-kvbmiiprzx-vs-samsung-odyssey-g51c-s27cg51/23638/39538"),
-            Source(id: "itechguides-nitro", title: "iTechGuides: Acer Nitro monitor settings (Black Boost)",
-                   url: "https://www.itechguides.com/top-5-acer-nitro-monitor-settings-best-guide/"),
-            Source(id: "apple-vrr", title: "Apple: Use an Adaptive Sync external display with your Mac",
-                   url: "https://support.apple.com/102144"),
-            Source(id: "tftcentral-hdr400", title: "TFTCentral: why DisplayHDR 400 needs to go",
-                   url: "https://tftcentral.co.uk/why-your-hdr-monitor-is-probably-not-hdr-at-all-and-why-displayhdr-400-needs-to-go/"),
-            Source(id: "displaybuddy-flicker", title: "Fixing external monitor flicker on Mac (auto-brightness, Eco, 48–60 Hz VRR)",
-                   url: "https://displaybuddy.app/blog/2026-05-13/fix-monitor-flickering-mac"),
-            Source(id: "m1ddc", title: "m1ddc: DDC/CI on Apple Silicon",
-                   url: "https://github.com/waydabber/m1ddc")
+            Source(id: "apple-display-p3", title: "Apple Developer: Display P3 (D65 white point, sRGB transfer function)",
+                   url: "https://developer.apple.com/documentation/coregraphics/cgcolorspace/displayp3")
         ],
-        confidence: "Specs are from Acer and retailer listings. No independent review of the V5 itself was found, so the menu paths and the Over Drive advice come from Acer's manuals and reviews of sibling Nitro XV272 models with the same menu system. Menu names on your unit may differ slightly."
+        confidence: "Acer's manual for the XV272K V5 couldn't be downloaded, so menu paths and defaults come from Acer's 2024 XV275K manual, the closest model with the same 4K 160 Hz / 1080p 320 Hz switch; older XV272 manuals name some items differently. No instrumented review of the V5 exists yet, so measurements are from siblings and say which. Your unit's menu may differ slightly."
     )
 
-    // MARK: ARZOPA portable monitors
-
-    public static let arzopaPortable = MonitorProfile(
-        id: "arzopa-portable",
-        displayName: "ARZOPA portable monitor",
-        namePatterns: ["arzopa"],
-        vendorIDs: [],
-        specs: MonitorSpecs(
-            panel: .ips,
-            size: "15.6–16.1 in (by model)",
-            native: "1920 × 1080 (Z1FC) or 2560 × 1600 (Z1RC)",
-            maxRefresh: "60 Hz (Z1RC) to 144 Hz (Z1FC)",
-            gamut: "sRGB class (\"100% sRGB\" claimed)",
-            isWideGamut: false,
-            peakSDRNits: nil,
-            hdr: nil,
-            vrr: nil,
-            hasSRGBMode: false,
-            defaultContrast: nil,
-            ddc: .notSupported
-        ),
-        osd: [
-            OSDStep(
-                useCases: Set(UseCase.allCases),
-                setting: "Brightness", value: "Match the Acer by eye",
-                path: "Buttons on the side → Brightness",
-                why: "It has no DDC/CI, so nothing on the Mac can set its backlight.",
-                sourceIDs: []),
-            OSDStep(
-                useCases: [.photoEditing, .videoEditing],
-                setting: "Picture mode / colour temperature", value: "Standard, Warm or 6500K (whichever exists)",
-                path: "Buttons on the side → Color",
-                why: "The closest it gets to the D65 white point editing assumes.",
-                sourceIDs: ["techradar-z1rc"])
-        ],
-        notes: [
-            "Use it as a reference preview at most. Reviews found ARZOPA panels fine for general use, but not to the colour-accuracy standard creative work expects.",
-            "While it mirrors the Acer, the two share one picture. For gaming, switch it off in Switchboard or use Extend so it can't hold the Acer back."
-        ],
-        sources: [
-            Source(id: "techradar-z1rc", title: "TechRadar: Arzopa Z1RC portable monitor review",
-                   url: "https://www.techradar.com/pro/arzopa-z1rc-portable-monitor-review"),
-            Source(id: "mightygadget-z1rc", title: "Mighty Gadget: Arzopa Z1RC review (vs Z1FC 144 Hz / 300 nits)",
-                   url: "https://mightygadget.co.uk/arzopa-z1rc-portable-monitor-review-a-2560x1600-hdr-500nits-8bit-qhd-usb-c-hdmi-laptop-monitor")
-        ],
-        confidence: "The exact ARZOPA model isn't known, so these are family-level facts. The app reads its real resolution and refresh rate from macOS."
-    )
-
-    // MARK: General research used for every display
+    // MARK: General research
 
     public static let generalSources: [Source] = [
-        Source(id: "dxo-targets", title: "DxO forum: editing targets (sRGB, gamma 2.2, D65, ≤120 cd/m²; 80–100 for print)",
-               url: "https://forum.dxo.com/t/calibrating-monitor-with-photolab-5-in-mind/33809"),
-        Source(id: "diyp-calibration", title: "DIYPhotography: monitor calibration for photography",
-               url: "https://www.diyphotography.net/monitor-calibration-photography/"),
         Source(id: "apple-vrr", title: "Apple: Use an Adaptive Sync external display with your Mac",
-               url: "https://support.apple.com/102144"),
-        Source(id: "apple-reference-modes", title: "Apple: reference modes (BT.709/BT.1886 for HD video)",
-               url: "https://support.apple.com/108321"),
-        Source(id: "rtings-hdr", title: "RTINGS: VESA DisplayHDR certification explained",
-               url: "https://www.rtings.com/monitor/learn/display-hdr")
+               url: "https://support.apple.com/en-us/102144"),
+        Source(id: "apple-hdr", title: "Apple: Play HDR video on your Mac (HDR10 external displays)",
+               url: "https://support.apple.com/en-us/102205"),
+        Source(id: "apple-frame-rate", title: "Apple: choose a refresh rate that divides evenly into the frame rate",
+               url: "https://support.apple.com/en-us/102297"),
+        Source(id: "apple-night-shift", title: "Apple: Use Night Shift on your Mac",
+               url: "https://support.apple.com/en-us/102191"),
+        Source(id: "apple-macbook-air-m4", title: "Apple: MacBook Air (13-inch, M4) tech specs",
+               url: "https://support.apple.com/en-us/122209"),
+        Source(id: "apple-studio-display", title: "Apple: Studio Display tech specs (218 pixels per inch)",
+               url: "https://support.apple.com/en-us/111890"),
+        Source(id: "rtings-contrast", title: "RTINGS: contrast ratio (LCD backlight moves black and white together)",
+               url: "https://www.rtings.com/monitor/tests/picture-quality/contrast-ratio"),
+        Source(id: "w3c-srgb", title: "W3C: sRGB (80 cd/m² reference white, D65)",
+               url: "https://www.w3.org/Graphics/Color/sRGB.html"),
+        Source(id: "canon-brightness", title: "Canon: monitor brightness for printing (around 120 cd/m²)",
+               url: "https://ij.manual.canon/ij/webmanual/PrintStudioPro/W/1.4/AR/DPPG/dppg_2-03.html"),
+        Source(id: "photoreview-prints", title: "Photo Review / BenQ: 80–120 cd/m² for print work",
+               url: "https://www.photoreview.com.au/featured/how-to-achieve-prints-with-the-right-brightness-colour-and-tonality/"),
+        Source(id: "itu-bt2035", title: "ITU-R BT.2035: 100 cd/m² reference white in a 10 lux room",
+               url: "https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2035-0-201307-I!!PDF-E.pdf")
     ]
 
     public static func generalSource(_ id: String) -> Source? { generalSources.first { $0.id == id } }

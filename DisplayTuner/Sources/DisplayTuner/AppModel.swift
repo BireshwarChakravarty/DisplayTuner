@@ -135,7 +135,7 @@ final class AppModel: ObservableObject {
         let ddc = self.ddc
         var found = DisplayDetector.detect { id in ddc.productName(for: id) }
         for index in found.indices where !found[index].isBuiltIn {
-            found[index].ddc = found[index].mirrorOf != nil ? .unavailable : (ddcStatus[found[index].key] ?? .unknown)
+            found[index].ddc = found[index].mirrorOf != nil || !found[index].isSupported ? .unavailable : (ddcStatus[found[index].key] ?? .unknown)
             found[index].capabilities = capabilityCache[found[index].key]
         }
         displays = found
@@ -150,7 +150,8 @@ final class AppModel: ObservableObject {
     /// once, in the background.
     private func probeDDC() {
         guard !ddcPaused else { return } // the wake handler probes again
-        for display in displays where !display.isBuiltIn && display.mirrorOf == nil && ddcStatus[display.key] == nil {
+        // Only the Acer is ever talked to over DDC/CI; other screens are left alone.
+        for display in displays where display.isSupported && display.mirrorOf == nil && ddcStatus[display.key] == nil {
             let key = display.key
             ddcStatus[key] = .probing
             update(key) { $0.ddc = .probing }
@@ -268,7 +269,7 @@ final class AppModel: ObservableObject {
     @discardableResult
     func quickApply(_ useCase: UseCase) async -> [ApplyResult] {
         guard canChange || isDemo else { return [] }
-        let targets = displays.filter { !$0.isBuiltIn }
+        let targets = displays.filter { $0.isSupported }
         if isDemo {
             for display in targets { useCases[display.id] = useCase }
             return []
@@ -283,7 +284,7 @@ final class AppModel: ObservableObject {
 
     /// Whether the menu-bar slider can move this monitor's backlight.
     func canSetBrightnessLive(_ display: DisplayFacts) -> Bool {
-        !isBusy && confirmation == nil && !recoveryRequired && !ddcPaused && display.mirrorOf == nil
+        !isBusy && confirmation == nil && !recoveryRequired && !ddcPaused && display.isSupported && display.mirrorOf == nil
             && !display.hasCalibration && display.ddc.values[VCP.brightness] != nil
     }
 
