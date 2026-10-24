@@ -95,6 +95,7 @@ struct DisplayDetailView: View {
                         }
                         .foregroundStyle(.white)
                         .shadow(color: .black.opacity(0.25), radius: 8, y: 2)
+                        .environment(\.colorScheme, .dark) // the hero is always dark, so its glass tags are too
                     }
                     stats
                 }

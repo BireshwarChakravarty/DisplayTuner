@@ -1,29 +1,29 @@
-# Display Tuner 1.1
+# Display Tuner 1.2
 
 Research-based display settings for gaming and editing on Apple Silicon Macs. Pick a screen, choose what you're doing, review exactly what will change, and apply it, with your previous settings saved for Undo.
 
-## New in 1.1
+## New in 1.2
 
-- **MacBook Look:** bright, vivid P3 colour like a MacBook Air's Retina display: the panel's native gamut colour-managed by macOS, brightness up to the panel's maximum, D65 white and gamma 2.2, with Night Shift and HDR off. It also tells you how far to sit for MacBook-level sharpness.
-- **Six presets in the menu bar,** with labels that fit.
+- **Built for the Acer Nitro XV272K V5.** Every fact and menu step was checked against a primary source: Acer's manuals, VESA's DisplayHDR list, instrumented reviews of its siblings (labelled with the model) and Apple's support pages. Claims that couldn't be confirmed were removed. Other screens are left alone.
+- **Max Brightness preset:** full backlight with the factory picture, plus the monitor's own Max Brightness switch, which Acer ships Off to save energy.
+- **Safer DDC/CI:** only brightness and contrast are written; at least 50 ms between commands; nothing while the display sleeps or for 3 seconds after it wakes; new resolutions last for the session until you keep them.
+- **Correct menu paths:** Color → Color Space (General or sRGB), Picture → Max Brightness, Gaming → Variable Refresh Rate, System → Max Refresh Rate and DFR.
+- **No more estimated nits.** The V5's brightness curve isn't published, so presets only set brightness where it's unambiguous (100%).
+- **Liquid Glass design:** an edge-to-edge hero, glass controls, preset cards, a research inspector and a floating Apply bar.
 
 ## Highlights
 
-- **Six presets:** Competitive Gaming, Immersive Gaming, Photo Editing, Video Editing, MacBook Look and Everyday. Each tile previews what it sets, for example "160 Hz · sRGB · 120 nits", and room lighting sets the brightness target.
-- **Overview at a glance:** a colour-gamut chart of your display against sRGB and P3, and readouts for refresh rate, desktop size, colour mode and brightness in estimated nits.
-- **Finds the free win:** if a screen runs slower than it can at the same resolution (for example 60 Hz instead of 160 Hz), it says so with a one-click fix.
+- **Seven presets:** Competitive Gaming, Immersive Gaming, Photo Editing, Video Editing, MacBook Look, Max Brightness and Everyday.
 - **Changes shown before → after,** each with its reason and source, and a switch to leave any one out.
-- **A checklist for what only you can do:** monitor menu settings, System Settings, cable and app settings, with progress remembered per display.
-- **Asks your monitor what it supports** over DDC/CI. On monitors that list an sRGB preset, editing switches the monitor's picture mode for you and checks the result; values the monitor doesn't list are never offered.
-- **Automatic presets (optional):** games and photo/video editors switch your screens' preset when they come to the front. Resolution and refresh rate never change automatically.
-- **Safe by design:** settings are saved before every change; resolution changes revert after 15 seconds unless you keep them; calibration profiles are never touched; Undo and Restore Originals are always available.
-- **Menu bar panel, Control Center style:** your screens with their mode and preset, a one-tap switch to 160 Hz, round preset buttons, a live brightness slider that moves the monitor's backlight with a nits readout, and Night Shift, room lighting and auto-preset tiles.
-- **Also:** saved presets, full-screen test patterns, an activity log, diagnostics export, light and dark appearance.
+- **A checklist for what only you can do:** monitor menu settings, System Settings and the cable, with progress remembered.
+- **Automatic presets (optional):** games and photo/video editors switch the preset when they come to the front. Resolution and refresh rate never change automatically.
+- **Undo, Restore Originals, a keep-or-revert countdown** for resolution changes, and calibration protection.
+- **Also:** saved presets, full-screen test patterns, a Control Center-style menu-bar panel with live brightness, an activity log, diagnostics export, light and dark appearance.
 
 ## Install
 
-Download **DisplayTuner-1.1.0-macOS.zip**, unzip it, and move **Display Tuner.app** to Applications. Requires Apple Silicon and macOS 26 or later. The app is ad-hoc signed, not notarized: on first launch, approve it in System Settings → Privacy & Security. SHA256SUMS.txt accompanies the download.
+Download **DisplayTuner-1.2.0-macOS.zip**, unzip it, and move **Display Tuner.app** to Applications. Requires Apple Silicon and macOS 26 or later. The app is ad-hoc signed, not notarized: on first launch, approve it in System Settings → Privacy & Security. SHA256SUMS.txt accompanies the download.
 
 ## Limits
 
-DDC/CI support varies by monitor, cable and dock. Night Shift and Apple Silicon DDC use private macOS APIs. Brightness figures are estimates from the panel's rated peak and gamut figures come from its profile; only a colorimeter gives exact values.
+Acer's own manual for the V5 couldn't be obtained, so menu paths follow the 2024 XV275K manual (the closest model with the same DFR switch); your menu may differ slightly. No instrumented review of the V5 exists yet. Night Shift and Apple Silicon DDC use private macOS APIs. Only a colorimeter gives exact brightness and colour figures.

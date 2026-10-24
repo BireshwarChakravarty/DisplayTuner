@@ -7,17 +7,14 @@
 
 ## What it does
 
-Pick a display, choose what you're doing, review exactly what will change, and apply it, with your previous settings saved for Undo. It looks and works like a built-in Mac app.
+Display Tuner is built for one monitor, the **Acer Nitro XV272K V5**, on an Apple Silicon Mac. Pick what you're doing, review exactly what will change, and apply it, with your previous settings saved for Undo. Other screens are listed but never touched.
 
-- **Six presets:** Competitive Gaming, Immersive Gaming, Photo Editing, Video Editing, MacBook Look and Everyday. Each previews what it sets, for example "160 Hz · sRGB · 120 nits".
-- **See your display:** a colour-gamut chart against sRGB and P3, and readouts for refresh rate, desktop size, colour mode and brightness.
-- **Finds the free win:** if a screen runs slower than it can at the same resolution, it offers the fix in one click.
-- **Changes shown before → after,** each with its reason and source.
-- **A checklist for what only you can do:** monitor menu, System Settings, cable and app settings.
-- **Asks your monitor what it supports** over DDC/CI, so hardware changes are only offered when the monitor lists them. On monitors that list an sRGB preset, editing switches it for you.
-- **Automatic presets (optional):** games and photo/video editors switch your screens' preset when they come to the front.
-- **Stay in control:** Undo, Restore Originals, a keep-or-revert countdown for resolution changes, calibration protection and recovery from interrupted changes.
-- **Also:** saved presets, full-screen test patterns, a Control Center-style menu-bar panel (presets, live brightness, Night Shift), activity history and diagnostics export.
+- **Seven presets:** Competitive Gaming, Immersive Gaming, Photo Editing, Video Editing, MacBook Look, Max Brightness and Everyday.
+- **Research you can check:** every fact and monitor-menu step comes from Acer's manuals, VESA's DisplayHDR list, instrumented reviews or Apple's support pages, and links to its source. Figures measured on sibling models say which model.
+- **Safe by design:** the app writes only brightness and contrast over DDC/CI (the controls Acer documents), at least 50 ms apart, never while the display sleeps, and never above the value the monitor reports as its maximum. A new resolution lasts for the session until you keep it.
+- **A checklist for what only you can do:** the monitor's menu (Color Space, Max Brightness, Over Drive…), System Settings and the cable.
+- **Finds the free win:** if the Acer runs slower than it can at the same resolution, it offers the fix in one click.
+- **Also:** automatic presets for games and editors, saved presets, test patterns, a Control Center-style menu-bar panel with live brightness, activity history and diagnostics export.
 
 ## Install
 
@@ -61,7 +58,7 @@ Demo displays are clearly labeled. Hardware writes, saved presets and full-scree
 
 ## Compatibility and privacy
 
-Settings, presets and the last 100 operation results stay on your Mac. There is no analytics service or account requirement. DDC and Night Shift support depend on the hardware and private macOS APIs. Brightness and gamut figures are estimates, not calibration measurements. Calibrated displays keep their hardware levels and picture modes.
+Settings, presets and the last 100 operation results stay on your Mac. There is no analytics service or account requirement. DDC and Night Shift use private macOS APIs. The app doesn't estimate brightness in cd/m²: the V5's brightness curve isn't published, so only a colorimeter gives exact figures. Calibrated displays keep their hardware levels and picture settings.
 
 Read the [release notes](RELEASE_NOTES.md) and [technical guide](DisplayTuner/README.md) for limits, sources and monitor-specific advice.
 
