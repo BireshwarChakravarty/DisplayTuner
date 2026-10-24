@@ -418,7 +418,9 @@ final class AppModel: ObservableObject {
             if automatic {
                 // Undo stays with the person's own last change; leaving the
                 // app restores what was there before the first automatic one.
-                if autoSnapshot == nil { autoSnapshot = snapshot }
+                // Fold in anything a later automatic preset changes first, so
+                // leaving puts back every setting, not just the first preset's.
+                autoSnapshot = autoSnapshot?.keepingOriginals(addingFrom: snapshot) ?? snapshot
             } else {
                 try SnapshotStore.save(snapshot, as: .last)
                 lastSnapshot = snapshot
@@ -614,12 +616,21 @@ final class AppModel: ObservableObject {
         guard !isBusy && !isDemo else { return }
         if recoveryRequired, let pendingSnapshot { await restore(pendingSnapshot); return }
         guard canChange, let lastSnapshot else { return }
-        await restore(lastSnapshot)
+        await restore(endingAutoSwitch(lastSnapshot))
     }
 
     func restoreOriginals() async {
         guard canChange, let originalSnapshot else { return }
-        await restore(originalSnapshot)
+        await restore(endingAutoSwitch(originalSnapshot))
+    }
+
+    /// Undo and Restore take over from an automatic preset: they also put back
+    /// whatever only the automatic preset changed, and auto mode ends so that
+    /// leaving the app later can't reverse them.
+    private func endingAutoSwitch(_ snapshot: Snapshot) -> Snapshot {
+        let target = autoSnapshot.map { snapshot.keepingOriginals(addingFrom: $0) } ?? snapshot
+        endAutoSwitch()
+        return target
     }
 
     /// Put back the settings from before automatic presets took over.

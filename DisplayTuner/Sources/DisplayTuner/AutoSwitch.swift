@@ -94,7 +94,7 @@ extension AppModel {
 
     /// Back to exactly how things were before, Night Shift included, rather
     /// than re-applying the preset card that was selected.
-    private func leaveAutoSwitch() async {
+    func leaveAutoSwitch() async {
         guard autoState != nil, canChange else { return }
         let baseline = autoBaseline
         let snapshot = autoSnapshot

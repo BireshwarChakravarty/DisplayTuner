@@ -58,12 +58,13 @@ final class StudioLifecycle: NSObject, NSApplicationDelegate {
     weak var model: AppModel?
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let model else { return .terminateNow }
-        guard model.isBusy || model.confirmation != nil else { return .terminateNow }
-        // Let a running change finish (briefly) and revert an unconfirmed
-        // mode, without cancelling a logout or shutdown.
+        guard model.isBusy || model.confirmation != nil || model.autoState != nil else { return .terminateNow }
+        // Let a running change finish (briefly), revert an unconfirmed mode and
+        // undo an automatic preset, without cancelling a logout or shutdown.
         Task {
             for _ in 0..<50 where model.isBusy { try? await Task.sleep(nanoseconds: 100_000_000) }
             if model.confirmation != nil { await model.revertUnconfirmed() }
+            if model.autoState != nil { await model.leaveAutoSwitch() }
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater

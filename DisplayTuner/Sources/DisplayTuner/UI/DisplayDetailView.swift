@@ -107,7 +107,7 @@ struct DisplayDetailView: View {
                 }
                 .padding(.horizontal, 28).padding(.top, 40).padding(.bottom, 22)
                 .frame(minWidth: 0, maxWidth: 980, alignment: .leading)
-                .frame(maxWidth: .infinity, minHeight: 300, alignment: .bottomLeading)
+                .frame(maxWidth: .infinity, minHeight: 300, alignment: .bottom)
                 .background {
                     HeroArtwork(useCase: useCase)
                         .backgroundExtensionEffect()
@@ -685,7 +685,7 @@ private struct PresetCard: View {
                 }
                 .padding(12)
             }
-            .frame(width: 196)
+            .frame(minWidth: 190, maxWidth: .infinity)
             .background(Color(nsColor: .controlBackgroundColor))
             .clipShape(.rect(cornerRadius: 16))
             .overlay(RoundedRectangle(cornerRadius: 16)

@@ -133,18 +133,24 @@ enum ColorProfiles {
         guard let info = deviceInfo(id),
               let custom = info[cf(kColorSyncCustomProfiles) as String] as? NSDictionary else { return nil }
         let value = defaultProfileID(info).flatMap { custom[$0] } ?? custom[defaultProfileKey]
-        if let url = value as? URL { return url }
-        if let url = value as? NSURL { return url as URL }
-        return nil
+        guard let url = (value as? URL) ?? (value as? NSURL).map({ $0 as URL }) else { return nil }
+        // Choosing the display's own profile in System Settings can store its
+        // factory URL as the custom one; that isn't a calibration.
+        if let factory = factoryProfileURL(info), factory.standardizedFileURL == url.standardizedFileURL { return nil }
+        return url
+    }
+
+    private static func factoryProfileURL(_ info: NSDictionary) -> URL? {
+        guard let profileID = defaultProfileID(info),
+              let factory = info[cf(kColorSyncFactoryProfiles) as String] as? NSDictionary,
+              let entry = factory[profileID] as? NSDictionary else { return nil }
+        let value = entry[cf(kColorSyncDeviceProfileURL) as String]
+        return (value as? URL) ?? (value as? NSURL).map { $0 as URL }
     }
 
     /// The ICC data of the display's own profile, from its factory entry.
     static func factoryProfileData(for id: CGDirectDisplayID) -> Data? {
-        guard let info = deviceInfo(id), let profileID = defaultProfileID(info),
-              let factory = info[cf(kColorSyncFactoryProfiles) as String] as? NSDictionary,
-              let entry = factory[profileID] as? NSDictionary else { return nil }
-        let value = entry[cf(kColorSyncDeviceProfileURL) as String]
-        guard let url = (value as? URL) ?? (value as? NSURL).map({ $0 as URL }) else { return nil }
+        guard let info = deviceInfo(id), let url = factoryProfileURL(info) else { return nil }
         return try? Data(contentsOf: url)
     }
 
