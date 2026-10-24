@@ -31,9 +31,15 @@ extension AppModel {
     }
 
     func setAutoSwitch(enabled: Bool, gamePreset: UseCase) {
+        guard !isDemo else { return }
         UserDefaults.standard.set(enabled, forKey: AutoSwitchSettings.enabledKey)
         UserDefaults.standard.set(gamePreset.rawValue, forKey: AutoSwitchSettings.gamePresetKey)
-        if let app = NSWorkspace.shared.frontmostApplication { frontmostAppChanged(app, delay: 0) }
+        if !enabled {
+            // Turned off (usually from this app's own Settings): undo the automatic preset now.
+            Task { await leaveAutoSwitch() }
+        } else if let app = NSWorkspace.shared.frontmostApplication {
+            frontmostAppChanged(app, delay: 0)
+        }
     }
 
     /// Forget automatic state: the person chose something themselves.
@@ -42,10 +48,11 @@ extension AppModel {
         autoTask = nil
         autoState = nil
         autoBaseline = [:]
+        autoSnapshot = nil
     }
 
     private func frontmostAppChanged(_ app: NSRunningApplication?, delay: Double = 1.5) {
-        // Ignore Display Tuner itself and background UI (login window, screen saver, menu extras).
+        // Ignore Gamut Pro itself and background UI (login window, screen saver, menu extras).
         guard let app, app.bundleIdentifier != Bundle.main.bundleIdentifier, app.activationPolicy == .regular else { return }
         autoTask?.cancel()
         autoTask = Task { [weak self] in
@@ -80,29 +87,33 @@ extension AppModel {
             let results = await apply(to: targets.map(\.id), automatic: true)
             autoState = AutoState(useCase: wanted, appName: name)
             showMonitorMenuHints(after: results, on: targets)
-        } else if autoState != nil {
-            // Back to what the person had chosen.
-            let baseline = autoBaseline
-            autoState = nil
-            autoBaseline = [:]
-            let targets = displays.filter { baseline[$0.id] != nil }
-            for display in targets { if let useCase = baseline[display.id] { setUseCase(useCase, for: display.id) } }
-            let results = await apply(to: targets.map(\.id), automatic: true)
-            showMonitorMenuHints(after: results, on: targets)
+        } else {
+            await leaveAutoSwitch()
         }
     }
 
-    /// The colour profile changed but the monitor's picture mode couldn't be
-    /// switched over DDC: say on that screen what to set, so the two agree.
+    /// Back to exactly how things were before, Night Shift included, rather
+    /// than re-applying the preset card that was selected.
+    private func leaveAutoSwitch() async {
+        guard autoState != nil, canChange else { return }
+        let baseline = autoBaseline
+        let snapshot = autoSnapshot
+        autoState = nil
+        autoBaseline = [:]
+        autoSnapshot = nil
+        for (id, useCase) in baseline { setUseCase(useCase, for: id) }
+        if let snapshot { await restoreAfterAuto(snapshot) }
+    }
+
+    /// The colour profile changed, and only the monitor's own menu can switch
+    /// its Color Space to match: say so on that screen.
     func showMonitorMenuHints(after results: [ApplyResult], on targets: [DisplayFacts]) {
         for display in targets {
             let mine = results.filter { $0.display == display.name }
             guard mine.contains(where: { $0.title == "Colour profile" && $0.ok }),
-                  !mine.contains(where: { $0.title == "Monitor picture mode" && $0.ok }),
-                  let step = recommendation(for: display).manualSteps.first(where: { $0.place == .monitorMenu && $0.setting == "Mode" })
+                  let step = recommendation(for: display).manualSteps.first(where: { $0.place == .monitorMenu && $0.setting == "Color Space" })
             else { continue }
-            let value = step.value.components(separatedBy: " (the app").first ?? step.value
-            showHint(on: display, title: "Set the monitor to \(value)", detail: step.path)
+            showHint(on: display, title: "Set Color Space to \(step.value)", detail: step.path)
         }
     }
 

@@ -30,7 +30,7 @@ public enum UseCase: String, CaseIterable, Codable, Sendable, Identifiable {
         case .immersiveGaming: return "Rich colour, smooth VRR"
         case .photoEditing: return "Accurate sRGB colour for photos"
         case .videoEditing: return "Accurate colour, judder-free playback"
-        case .macbookLook: return "Bright, vivid P3 colour like a Retina display"
+        case .macbookLook: return "Bright, wide P3 colour, as on a MacBook"
         case .maxBrightness: return "Full backlight, factory picture"
         case .everyday: return "Native colour at the highest refresh"
         }

@@ -1,7 +1,7 @@
-name: Publish Display Tuner
+name: Publish Gamut Pro
 on:
   push:
-    branches: ["claude/lucid-bell-7thkev"]
+    branches: ["main", "claude/lucid-bell-7thkev"]
     paths: ["release.json"]
   workflow_dispatch:
     inputs:
@@ -13,7 +13,8 @@ permissions:
   contents: write
 concurrency:
   group: display-tuner-release
-  cancel-in-progress: true
+  # Never cancel a run between deleting and recreating a release.
+  cancel-in-progress: false
 jobs:
   release:
     runs-on: macos-26
@@ -36,21 +37,29 @@ jobs:
         run: bash DisplayTuner/make-app.sh --package
       - name: Verify signature and archive
         run: |
-          codesign --verify --deep --strict "DisplayTuner/.build/app/Display Tuner.app"
-          unzip -t "DisplayTuner/dist/DisplayTuner-$VERSION-macOS.zip"
+          codesign --verify --deep --strict "DisplayTuner/.build/app/Gamut Pro.app"
+          unzip -t "DisplayTuner/dist/GamutPro-$VERSION-macOS.zip"
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
           REPLACE: ${{ inputs.replace }}
         run: |
-          if [ "$REPLACE" = "true" ]; then
-            gh release delete "$TAG" --yes --cleanup-tag || true
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            if [ "$REPLACE" != "true" ]; then
+              echo "Release $TAG already exists; run the workflow with replace to republish it." >&2
+              exit 1
+            fi
+            gh release delete "$TAG" --yes --cleanup-tag
+          fi
+          # A leftover tag would make the release ignore --target.
+          if [ -n "$(git ls-remote --tags origin "refs/tags/$TAG")" ]; then
+            git push origin ":refs/tags/$TAG"
           fi
           gh release create "$TAG" \
-            "DisplayTuner/dist/DisplayTuner-$VERSION-macOS.zip" \
+            "DisplayTuner/dist/GamutPro-$VERSION-macOS.zip" \
             DisplayTuner/dist/SHA256SUMS.txt \
-            DisplayTuner/dist/DisplayTuner-Icon.png \
+            DisplayTuner/dist/GamutPro-Icon.png \
             LICENSE \
             --target "$GITHUB_SHA" \
-            --title "Display Tuner $VERSION" \
+            --title "Gamut Pro $VERSION" \
             --notes-file RELEASE_NOTES.md

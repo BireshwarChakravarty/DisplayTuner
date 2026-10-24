@@ -1,6 +1,6 @@
 > **Version 1.2:** See the [main README](../README.md) for features, install and release instructions.
 
-# Display Tuner
+# Gamut Pro
 
 A Mac app for one monitor, the **Acer Nitro XV272K V5**, on an Apple Silicon
 Mac. Pick what you're doing (**Competitive Gaming**, **Immersive Gaming**,
@@ -73,7 +73,8 @@ Brightness 100 gave 139 cd/m² with it Off and 280 with it On.
 
 ## Safety
 
-- **Only brightness and contrast are ever written over DDC/CI.** These are
+- **Only brightness and contrast are ever written over DDC/CI**, by every
+  path: presets, the live slider, Undo, Restore and crash recovery. These are
   controls Acer documents in the Picture menu. Acer's manual warns: *"Adjust
   only those controls that are covered by the operating instructions, since
   improper adjustment of other controls may result in damage."* The app never
@@ -84,10 +85,13 @@ Brightness 100 gave 139 cd/m² with it Off and 280 with it On.
 - **Nothing is sent while the display or the Mac sleeps**, or for 3 seconds
   after they wake (MonitorControl does the same), and the monitor is read
   afresh afterwards.
+- **Undo, Restore and crash recovery** write brightness and contrast only to
+  the Acer, capped at the maximum it reports at that moment. Snapshots saved by
+  older versions are cleaned when loaded.
 - **The wrong-screen guard fails closed:** vendor, model and serial must match
   before anything is sent, and only the Acer is ever addressed.
-- **Undo** and **Restore Settings From Before Display Tuner** are always
-  available. Saved state lives in `~/Library/Application Support/DisplayTuner/`.
+- **Undo** and **Restore Settings From Before Gamut Pro** are available
+  after any change. Saved state lives in `~/Library/Application Support/DisplayTuner/`.
 
 ## Install and build
 

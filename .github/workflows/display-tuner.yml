@@ -1,4 +1,4 @@
-name: Display Tuner
+name: Gamut Pro
 on:
   push:
     paths: ["DisplayTuner/**", "scripts/**", ".github/workflows/display-tuner.yml"]
@@ -15,18 +15,20 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v5
+      - name: Validate release metadata
+        run: python3 scripts/validate-release.py
       - name: Core tests
         run: swift test --package-path DisplayTuner
       - name: Package
         run: bash DisplayTuner/make-app.sh --package
       - name: Verify
-        run: codesign --verify --deep --strict "DisplayTuner/.build/app/Display Tuner.app"
+        run: codesign --verify --deep --strict "DisplayTuner/.build/app/Gamut Pro.app"
       - name: Screenshots (demo workspace, no hardware access)
         continue-on-error: true
-        run: bash scripts/screenshots.sh "DisplayTuner/.build/app/Display Tuner.app" screenshots
+        run: bash scripts/screenshots.sh "DisplayTuner/.build/app/Gamut Pro.app" screenshots
       - uses: actions/upload-artifact@v4
         with:
-          name: DisplayTuner
+          name: GamutPro
           path: DisplayTuner/dist/*
       - uses: actions/upload-artifact@v4
         if: always()

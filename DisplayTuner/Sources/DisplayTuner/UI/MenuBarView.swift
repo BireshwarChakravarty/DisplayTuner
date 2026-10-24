@@ -38,7 +38,7 @@ struct MenuBarView: View {
         HStack(spacing: 10) {
             AppMark().frame(width: 34, height: 34)
             VStack(alignment: .leading, spacing: 1) {
-                Text("Display Tuner").font(.headline)
+                Text("Gamut Pro").font(.headline)
                 Text(headline).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
@@ -47,7 +47,7 @@ struct MenuBarView: View {
                 openSettings()
                 NSApp.activate()
             }
-            CircleButton(symbol: "macwindow", help: "Open Display Tuner") { showWindow() }
+            CircleButton(symbol: "macwindow", help: "Open Gamut Pro") { showWindow() }
         }
         .padding(.horizontal, 4)
         .padding(.top, 2)
@@ -85,10 +85,9 @@ struct MenuBarView: View {
                 ForEach(externals) { display in
                     ScreenRow(display: display, useCase: model.useCase(for: display.id),
                               mirroring: display.mirrorOf.flatMap { id in model.displays.first { $0.id == id }?.name },
-                              faster: fasterMode(for: display), enabled: model.canChange) { faster in
+                              faster: model.fasterMode(for: display), enabled: model.canChange) { faster in
                         Task {
-                            model.chooseMode(faster, for: display)
-                            await model.apply(to: [display.id])
+                            await model.applyRefreshOnly(faster, for: display)
                             if model.confirmation != nil { showWindow() }
                         }
                     }
@@ -97,12 +96,6 @@ struct MenuBarView: View {
         }
     }
 
-    private func fasterMode(for display: DisplayFacts) -> DisplayMode? {
-        guard display.mirrorOf == nil, let current = display.currentMode,
-              let best = ModePicker.bestMode(for: current.layout, in: display.modes, policy: .highest),
-              best.refreshRate > current.refreshRate + 1 else { return nil }
-        return best
-    }
 
     // MARK: Presets
 
@@ -120,7 +113,7 @@ struct MenuBarView: View {
                                      working: pendingPreset == useCase) {
                             Task { await choose(useCase) }
                         }
-                        .disabled(!canTap)
+                        .disabled(!canTap || mainDisplay == nil)
                         .frame(maxWidth: .infinity)
                     }
                 }
@@ -150,9 +143,13 @@ struct MenuBarView: View {
         if model.confirmation != nil { showWindow(); return }
         let failed = results.filter { !$0.ok }.count
         let done = results.count - failed
-        let steps = mainDisplay.map { model.recommendation(for: $0).manualSteps.count } ?? 0
+        let steps = mainDisplay.map { model.recommendation(for: $0).manualSteps.filter { $0.place == .monitorMenu }.count } ?? 0
         var parts: [String] = []
-        if results.isEmpty { parts.append("\(useCase.title) is set") }
+        if let waiting = model.results.first, waiting.title == "Waiting for the display" {
+            withAnimation { message = waiting.message }
+            return
+        }
+        if results.isEmpty { parts.append("\(useCase.title) is selected; nothing needed changing") }
         else { parts.append("\(useCase.title): \(done) change\(done == 1 ? "" : "s") made") }
         if failed > 0 { parts.append("\(failed) didn't take") }
         if steps > 0 { parts.append("\(steps) step\(steps == 1 ? "" : "s") on the monitor") }
@@ -168,7 +165,7 @@ struct MenuBarView: View {
                        on: model.nightShiftEnabled == true, tint: .orange) {
                 if let on = model.nightShiftEnabled { model.setNightShiftNow(!on) }
             }
-            .disabled(model.nightShiftEnabled == nil || model.isBusy)
+            .disabled(model.nightShiftEnabled == nil || model.isBusy || model.confirmation != nil)
 
             ToggleTile(symbol: "wand.and.stars", title: "Auto", value: autoEnabled ? "On" : "Off",
                        on: autoEnabled, tint: .accentColor) {
@@ -189,14 +186,15 @@ struct MenuBarView: View {
             }
             .disabled(model.lastSnapshot == nil || !model.canChange)
             Spacer()
-            Button("Open Display Tuner") { showWindow() }
+            Button("Open Gamut Pro") { showWindow() }
             Button {
                 Task {
                     if model.confirmation != nil { await model.revertUnconfirmed() }
                     NSApp.terminate(nil)
                 }
             } label: { Image(systemName: "power") }
-            .help("Quit Display Tuner")
+            .help("Quit Gamut Pro")
+            .accessibilityLabel("Quit Gamut Pro")
             .disabled(model.isBusy).keyboardShortcut("q")
         }
         .buttonStyle(.borderless)
@@ -288,7 +286,7 @@ private struct ScreenRow: View {
                     .font(.caption)
                     .padding(.horizontal, 10).padding(.vertical, 6)
                     .background(Color.orange.opacity(0.16), in: Capsule())
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.primary)
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -342,8 +340,7 @@ private struct PresetButton: View {
                 Text(shortTitle(useCase))
                     .font(.system(size: 10.5, weight: selected ? .semibold : .regular))
                     .foregroundStyle(selected ? Color.primary : Color.secondary)
-                    .lineLimit(1).minimumScaleFactor(0.7)
-                    .frame(width: 50)
+                    .lineLimit(1).minimumScaleFactor(0.85)
             }
             .opacity(isEnabled ? 1 : 0.5)
             .contentShape(Rectangle())
@@ -410,14 +407,14 @@ private struct ThickSlider: View {
             let width = proxy.size.width
             let fraction = min(max(value / 100, 0), 1)
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.primary.opacity(0.12))
+                Capsule().fill(Color.primary.opacity(0.18))
                 Capsule()
-                    .fill(Color.white.opacity(isEnabled ? 0.95 : 0.5))
-                    .frame(width: max(30, width * fraction))
+                    .fill(Color.accentColor.opacity(isEnabled ? 1 : 0.4))
+                    .frame(width: max(30, 30 + (width - 30) * fraction))
                     .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
                 Image(systemName: "sun.min.fill")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.black.opacity(0.55))
+                    .foregroundStyle(Color.white)
                     .padding(.leading, 9)
                 Image(systemName: "sun.max.fill")
                     .font(.system(size: 13, weight: .semibold))
@@ -429,12 +426,15 @@ private struct ThickSlider: View {
             .contentShape(Capsule())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { drag in
-                    guard isEnabled else { return }
+                    guard isEnabled, width > 0 else { return }
                     value = (min(max(drag.location.x / width, 0), 1) * 100).rounded()
                 }
                 .onEnded { _ in onEnd() })
         }
         .frame(height: 30)
+        .focusable()
+        .onKeyPress(.leftArrow) { value = max(0, value - 5); onEnd(); return .handled }
+        .onKeyPress(.rightArrow) { value = min(100, value + 5); onEnd(); return .handled }
         .accessibilityElement()
         .accessibilityLabel("Brightness")
         .accessibilityValue("\(Int(value.rounded())) percent")
@@ -480,6 +480,7 @@ private struct ToggleTile: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
+        .accessibilityAddTraits(.isToggle)
         .accessibilityValue(value)
     }
 }

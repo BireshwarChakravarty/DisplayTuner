@@ -29,7 +29,7 @@ public enum RecommendationEngine {
                 useCase: useCase, displayID: display.id, profile: nil,
                 headline: "Not supported",
                 changes: [], manualSteps: [], warnings: [],
-                notes: ["Display Tuner is built for the Acer Nitro XV272K V5 and leaves this screen alone."],
+                notes: ["Gamut Pro is built for the Acer Nitro XV272K V5 and leaves this screen alone."],
                 modeOptions: [], sources: [])
         }
         var builder = Builder(useCase: useCase, display: display, context: context, profile: profile)
@@ -151,7 +151,7 @@ public enum RecommendationEngine {
                 if fits.isEmpty { return "No rate here divides evenly by common frame rates, so this is the fastest." }
                 return "\(DisplayMode.hz(hz)) Hz divides evenly by \(fits.joined(separator: ", ")) fps footage. Apple: \"Choose a refresh rate that divides evenly into the frame rate of your content.\""
             case .competitiveGaming:
-                return String(format: "The highest rate at full resolution: a new frame every %.1f ms, against 16.7 ms at 60 Hz.", 1000 / hz)
+                return String(format: "The highest rate at this size: a new frame every %.1f ms, against 16.7 ms at 60 Hz.", 1000 / hz)
             default:
                 return "The highest rate this display offers at the current size."
             }
@@ -176,16 +176,16 @@ public enum RecommendationEngine {
                          why: "Apple: \"Choose a refresh rate that divides evenly into the frame rate of your content.\" A variable rate follows the source instead.",
                          sources: ["apple-frame-rate"])
                 }
-            case .photoEditing:
-                break
-            default:
+            case .competitiveGaming, .immersiveGaming:
                 step(.systemSettings, "Refresh Rate", "Variable (or Adaptive)",
                      path: "System Settings → Displays → \(display.name) → Refresh Rate",
-                     why: "Adaptive-Sync lets the refresh rate follow the frame rate. Apple: \"Choose Variable or Adaptive from the Refresh Rate pop-up menu. To stop using Adaptive Sync, choose one of the fixed refresh rates instead.\" Set it after applying here, because the app selects a fixed rate.",
+                     why: "Apple: \"Adaptive Sync is well-suited for applications such as gaming and video playback\" and \"Choose Variable or Adaptive from the Refresh Rate pop-up menu.\" Set it after applying here, because the app selects a fixed rate.",
                      sources: ["apple-vrr"])
+            default:
+                break // a fixed rate: Apple says that outside games and video Adaptive Sync "might produce a flickering or stuttering effect"
             }
             step(.hardware, "Cable", "USB-C / Thunderbolt to DisplayPort",
-                 path: "Mac mini Thunderbolt port → monitor DisplayPort or USB-C",
+                 path: "Mac Thunderbolt / USB-C port → monitor DisplayPort or USB-C",
                  why: "Acer supports 4K at 160 Hz over DisplayPort or USB-C. Apple, for Adaptive Sync: \"Do not use an HDMI cable or adapter.\"",
                  sources: ["acer-manual-xv275k", "apple-vrr"])
         }
@@ -243,7 +243,7 @@ public enum RecommendationEngine {
             if wantsFullBrightness {
                 if brightness.percent < 100 {
                     let why = (useCase == .macbookLook ? "A MacBook Air reaches 500 nits; full backlight is as close as this panel gets. " : "Full backlight. ")
-                        + "On an LCD the backlight lifts white and black together, so the contrast ratio stays about the same (RTINGS). The XV272K V3 measured 388.7 cd/m² at Brightness 100. Turn Max Brightness On in the Picture menu as well, or the backlight stays capped."
+                        + "On an LCD the backlight lifts white and black together, so the contrast ratio stays about the same (RTINGS). The XV272K V3 measured 388.7 cd/m² at Brightness 100. If your Picture menu has Max Brightness, turn it On as well: on the XV282K KV, Brightness 100 gave 139 cd/m² with it Off and 280 with it On."
                     changes.append(PlannedChange(
                         id: "ddc-brightness",
                         change: .ddc(DDCTarget(vcp: VCP.brightness, value: .percent(100))),
@@ -262,7 +262,11 @@ public enum RecommendationEngine {
             }
 
             if let contrast = ddcValues[VCP.contrast], contrast.percent != 50 {
-                notes.append("Contrast is \(contrast.percent). The default measured on the sibling XV273K is 50, and calibrations of sibling models used 48–49. You can set it under Adjust.")
+                if useCase.isEditing {
+                    notes.append("Contrast is \(contrast.percent). Reviews of the XV273K and XV272U KV found Contrast locked in the sRGB colour space, so change it, if at all, before switching Color Space to sRGB.")
+                } else {
+                    notes.append("Contrast is \(contrast.percent). TFTCentral lists 50 as the XV273K's default, and Tom's Hardware's calibration of the XV272U KV used 49. You can set it under Adjust.")
+                }
                 _ = sources(["tftcentral-xv273k", "tomshw-xv272u"])
             }
         }
@@ -289,7 +293,7 @@ public enum RecommendationEngine {
                 notes.append("Calibration protected: keep the monitor's calibrated picture settings unchanged. Presets only change resolution, refresh rate and Night Shift.")
                 return
             }
-            guard display.mirrorOf == nil else { return }
+            // The monitor's own menu doesn't depend on macOS mirroring.
             for item in profile.osd where item.useCases.contains(useCase) {
                 step(.monitorMenu, item.setting, item.value, path: item.path, why: item.why, sources: item.sourceIDs)
             }

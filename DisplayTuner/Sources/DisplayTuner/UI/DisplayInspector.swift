@@ -33,6 +33,7 @@ struct DisplayInspector: View {
                                     if let source = profile.source(id), let url = URL(string: source.url) {
                                         Link(destination: url) { Image(systemName: "link") }
                                             .help(source.title)
+                                            .accessibilityLabel(source.title)
                                     }
                                 }
                             }

@@ -57,6 +57,8 @@ final class Arm64DDC: @unchecked Sendable {
     /// after a write and between capabilities fragments (ddcutil quotes the
     /// spec in parms.h); shorter gaps make monitors drop commands.
     private var lastTransaction: UInt64 = 0
+    /// The read-request checksum seed each monitor answers to.
+    private var readSeed: [DisplayIdentity: UInt8] = [:]
     private static let minimumGap: UInt64 = 50_000_000
 
     /// Wait until the bus has been quiet for `minimumGap`.
@@ -72,7 +74,10 @@ final class Arm64DDC: @unchecked Sendable {
         }
     }
 
-    func invalidate() { cache.removeAll() }
+    func invalidate() {
+        cache.removeAll()
+        readSeed.removeAll()
+    }
 
     /// Set a VCP feature. Returns true if the monitor acknowledged the write.
     func write(_ vcp: UInt8, value: UInt16, for display: DisplayIdentity) -> Bool {
@@ -99,7 +104,9 @@ final class Arm64DDC: @unchecked Sendable {
         // m1ddc and MonitorControl seed a read request's checksum with 0x6E
         // alone on Apple Silicon; fall back to the standard seed if that
         // gets no valid reply.
-        for seed: UInt8 in [0x6E, 0x6E ^ 0x51] {
+        // Once a seed has worked for this monitor, use only that one, so a
+        // stale reply to an earlier request can't pass as fresh.
+        for seed: UInt8 in readSeed[display].map({ [$0] }) ?? [0x6E, 0x6E ^ 0x51] {
             let request = DDCPacket.withChecksum(body, seed: seed)
             for _ in 0..<2 {
                 guard send(request, to: service) else { continue }
@@ -108,6 +115,7 @@ final class Arm64DDC: @unchecked Sendable {
                 let result = readReply(service, into: &reply)
                 if result == KERN_SUCCESS, let value = DDCPacket.parseReply(reply, vcp: vcp) {
                     cache[display] = service
+                    readSeed[display] = seed
                     return value
                 }
                 usleep(20_000)
@@ -240,14 +248,19 @@ final class Arm64DDC: @unchecked Sendable {
             guard IORegistryEntryGetName(entry, nameBuffer) == KERN_SUCCESS else { continue }
             let name = String(cString: nameBuffer)
 
-            if name.contains("AppleCLCD2") || name.contains("IOMobileFramebufferShim") {
+            if IOObjectConformsTo(entry, "IOMobileFramebuffer") != 0
+                || name.contains("AppleCLCD2") || name.contains("IOMobileFramebufferShim") {
                 lastFramebuffer = framebufferInfo(entry)
             } else if name.contains("DCPAVServiceProxy") {
-                guard copyProperty("Location", of: entry) as? String == "External",
+                // A proxy belongs to the framebuffer just before it. Consume
+                // that identity whatever happens next, so it can never carry
+                // over to a later port and send commands to the wrong monitor.
+                let framebuffer = lastFramebuffer
+                lastFramebuffer = nil
+                guard let framebuffer, copyProperty("Location", of: entry) as? String == "External",
                       let service = IOAVServiceCreateWithService(kCFAllocatorDefault, entry)
                 else { continue }
-                candidates.append(AVCandidate(service: service, info: lastFramebuffer ?? FramebufferInfo()))
-                lastFramebuffer = nil
+                candidates.append(AVCandidate(service: service, info: framebuffer))
             }
         }
         return candidates

@@ -51,8 +51,20 @@ public struct Snapshot: Codable, Hashable, Sendable {
 
     public func display(_ key: String) -> DisplaySnapshot? { displays.first { $0.key == key } }
 
+    /// What may be restored: brightness and contrast on the supported monitor
+    /// only. Earlier versions also saved colour presets and other monitors'
+    /// DDC values; those are dropped, never written back.
+    public func sanitized() -> Snapshot {
+        var copy = self
+        for index in copy.displays.indices {
+            let supported = KnowledgeBase.match(name: copy.displays[index].name, vendorID: 0) != nil
+            copy.displays[index].ddc = supported ? copy.displays[index].ddc.filter { DDCPolicy.writable.contains($0.key) } : [:]
+        }
+        return copy
+    }
+
     /// Fold `newer` into this snapshot, keeping this one's values wherever it
-    /// already has them. Used for "settings from before Display Tuner": the
+    /// already has them. Used for "settings from before Gamut Pro": the
     /// first value seen for each control is the original.
     public func keepingOriginals(addingFrom newer: Snapshot) -> Snapshot {
         var merged = self

@@ -30,6 +30,9 @@ enum DisplayDetector {
             let colorSpace = CGDisplayCopyColorSpace(id)
             let icc = colorSpace.copyICCData() as Data?
             let customProfile = ColorProfiles.customProfileURL(for: id)
+            // The panel's gamut comes from its own (factory) profile; the active
+            // one may be an assigned sRGB profile that says nothing about the panel.
+            let panelICC = ColorProfiles.factoryProfileData(for: id) ?? (customProfile == nil ? icc : nil)
 
             var name = screen?.localizedName ?? nameFallback(id) ?? "Display \(id)"
             if CGDisplayIsBuiltin(id) != 0, screen == nil { name = "Built-in Display" }
@@ -45,7 +48,7 @@ enum DisplayDetector {
                 modes: DisplayModes.all(for: id).map(DisplayModes.model),
                 currentMode: CGDisplayCopyDisplayMode(id).map(DisplayModes.model),
                 widthMM: size.width > 0 ? Double(size.width) : nil,
-                primaries: icc.flatMap(ICCProfile.primaries(from:)),
+                primaries: panelICC.flatMap(ICCProfile.primaries(from:)),
                 profileName: icc.flatMap(ICCProfile.description(from:)) ?? (colorSpace.name as String?),
                 customProfilePath: customProfile?.path,
                 edrHeadroom: Double(screen?.maximumPotentialExtendedDynamicRangeColorComponentValue ?? 1),
@@ -122,14 +125,31 @@ enum ColorProfiles {
 
     /// The profile someone assigned to this display, or nil if it uses its
     /// own (factory / EDID) profile.
+    ///
+    /// ColorSyncDevice.h: the default profile's ID sits inside the
+    /// kColorSyncFactoryProfiles dictionary; kColorSyncCustomProfiles maps
+    /// that ID to a URL, or to kCFNull when no profile was assigned.
     static func customProfileURL(for id: CGDirectDisplayID) -> URL? {
         guard let info = deviceInfo(id),
-              let profileID = info[defaultProfileKey] as? String,
               let custom = info[cf(kColorSyncCustomProfiles) as String] as? NSDictionary else { return nil }
-        let value = custom[profileID]
+        let value = defaultProfileID(info).flatMap { custom[$0] } ?? custom[defaultProfileKey]
         if let url = value as? URL { return url }
         if let url = value as? NSURL { return url as URL }
         return nil
+    }
+
+    /// The ICC data of the display's own profile, from its factory entry.
+    static func factoryProfileData(for id: CGDirectDisplayID) -> Data? {
+        guard let info = deviceInfo(id), let profileID = defaultProfileID(info),
+              let factory = info[cf(kColorSyncFactoryProfiles) as String] as? NSDictionary,
+              let entry = factory[profileID] as? NSDictionary else { return nil }
+        let value = entry[cf(kColorSyncDeviceProfileURL) as String]
+        guard let url = (value as? URL) ?? (value as? NSURL).map({ $0 as URL }) else { return nil }
+        return try? Data(contentsOf: url)
+    }
+
+    private static func defaultProfileID(_ info: NSDictionary) -> String? {
+        (info[cf(kColorSyncFactoryProfiles) as String] as? NSDictionary)?[defaultProfileKey] as? String
     }
 
     static func url(for choice: ProfileChoice) -> URL? {

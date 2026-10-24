@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 import TunerCore
 
 enum AppVersion {
-    static var current: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.0.1" }
+    static var current: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev" }
 }
 
 enum StudioSection: String, CaseIterable, Identifiable {
@@ -31,9 +31,15 @@ struct StudioPreset: Codable, Identifiable {
     var brightness: Double?
     var contrast: Double?
     var date = Date()
+    /// Each preset decodes on its own, so one unreadable entry (say, from a
+    /// newer version) doesn't wipe the rest the next time presets are saved.
     static func load() -> [Self] {
-        guard let data = UserDefaults.standard.data(forKey: "studioPresets") else { return [] }
-        return (try? JSONDecoder().decode([Self].self, from: data)) ?? []
+        guard !ProcessInfo.processInfo.arguments.contains("--demo"),
+              let data = UserDefaults.standard.data(forKey: "studioPresets"),
+              let items = try? JSONSerialization.jsonObject(with: data) as? [Any] else { return [] }
+        return items.compactMap { item in
+            (try? JSONSerialization.data(withJSONObject: item)).flatMap { try? JSONDecoder().decode(Self.self, from: $0) }
+        }
     }
 }
 
@@ -44,7 +50,8 @@ struct ActivityEntry: Codable, Identifiable {
     var detail: String
     var ok: Bool
     static func load() -> [Self] {
-        guard let data = UserDefaults.standard.data(forKey: "studioActivity") else { return [] }
+        guard !ProcessInfo.processInfo.arguments.contains("--demo"),
+              let data = UserDefaults.standard.data(forKey: "studioActivity") else { return [] }
         return (try? JSONDecoder().decode([Self].self, from: data)) ?? []
     }
 }
@@ -99,7 +106,7 @@ extension AppModel {
 
     func exportDiagnostics() {
         let report = """
-        Display Tuner \(AppVersion.current) — Diagnostics
+        Gamut Pro \(AppVersion.current) — Diagnostics
         Generated: \(Date().formatted())
         System: \(ProcessInfo.processInfo.operatingSystemVersionString)
         Mode: \(isDemo ? "Demo (simulated displays)" : "Live hardware")
@@ -120,7 +127,7 @@ extension AppModel {
         }.joined()
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.plainText]
-        panel.nameFieldStringValue = "DisplayTuner-Diagnostics.txt"
+        panel.nameFieldStringValue = "GamutPro-Diagnostics.txt"
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do { try report.write(to: url, atomically: true, encoding: .utf8); notice = "Diagnostics exported." }
@@ -138,7 +145,7 @@ extension AppModel {
         panel.contentView = NSHostingView(rootView: VStack(spacing: 8) {
             Image(systemName: "display").font(.system(size: 30))
             Text(display.name).font(.title2.bold())
-            Text("Display Tuner").font(.caption).foregroundStyle(.secondary)
+            Text("Gamut Pro").font(.caption).foregroundStyle(.secondary)
         }.frame(width: 360, height: 150).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24)))
         panel.setFrameOrigin(NSPoint(x: screen.frame.midX - 180, y: screen.frame.midY - 75))
         panel.orderFrontRegardless()

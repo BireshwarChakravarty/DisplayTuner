@@ -5,6 +5,7 @@ set -uo pipefail
 APP="$1"; OUT="$2"
 BIN="$APP/Contents/MacOS/DisplayTuner"
 mkdir -p "$OUT"
+failures=0
 shoot() {
     local name="$1" appearance="$2"; shift 2
     defaults write app.displaytuner.DisplayTuner appearance "$appearance"
@@ -20,6 +21,7 @@ shoot() {
         kill "$pid" 2>/dev/null
     else
         echo "exited early: $name"
+        failures=$((failures + 1))
         latest=$(ls -t ~/Library/Logs/DiagnosticReports/DisplayTuner* 2>/dev/null | head -1)
         [ -n "$latest" ] && head -80 "$latest"
     fi
@@ -48,3 +50,4 @@ for f in "$OUT"/*.png; do
     base64 -i "${f%.png}.jpg" | tr -d '\n'; echo
     echo "::endgroup::"
 done
+[ "$failures" -eq 0 ] || { echo "$failures screenshot(s) crashed" >&2; exit 1; }

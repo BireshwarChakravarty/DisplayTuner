@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draw the Display Tuner app icon (1024 × 1024 PNG) and store it as the
+"""Draw the Gamut Pro app icon (1024 × 1024 PNG) and store it as the
 versioned base64 source that build-assets.py turns into AppIcon.icns.
 
 The design: a machined tuning knob inside a glowing spectrum ring, on a

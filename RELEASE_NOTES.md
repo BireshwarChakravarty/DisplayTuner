@@ -1,15 +1,20 @@
-# Display Tuner 1.2
+# Gamut Pro 1.2
 
 Research-based display settings for gaming and editing on Apple Silicon Macs. Pick a screen, choose what you're doing, review exactly what will change, and apply it, with your previous settings saved for Undo.
 
 ## New in 1.2
 
+- **Display Tuner is now Gamut Pro.** Your settings, saved presets and Undo history carry over.
+- **Audited end to end:** every line of the hardware layer, app state, research engine, interface and release pipeline was reviewed, and every finding fixed or documented (see below).
 - **Built for the Acer Nitro XV272K V5.** Every fact and menu step was checked against a primary source: Acer's manuals, VESA's DisplayHDR list, instrumented reviews of its siblings (labelled with the model) and Apple's support pages. Claims that couldn't be confirmed were removed. Other screens are left alone.
 - **Max Brightness preset:** full backlight with the factory picture, plus the monitor's own Max Brightness switch, which Acer ships Off to save energy.
 - **Safer DDC/CI:** only brightness and contrast are written; at least 50 ms between commands; nothing while the display sleeps or for 3 seconds after it wakes; new resolutions last for the session until you keep them.
 - **Correct menu paths:** Color → Color Space (General or sRGB), Picture → Max Brightness, Gaming → Variable Refresh Rate, System → Max Refresh Rate and DFR.
 - **No more estimated nits.** The V5's brightness curve isn't published, so presets only set brightness where it's unambiguous (100%).
-- **Liquid Glass design:** an edge-to-edge hero, glass controls, preset cards, a research inspector and a floating Apply bar.
+- **Liquid Glass design:** an edge-to-edge hero, preset cards, a research inspector and a floating glass Apply bar, with glass kept to controls as Apple's guidance asks.
+- **Safer restore and recovery:** Undo, Restore and crash recovery write only brightness and contrast, only to the Acer, capped at its reported maximum; old snapshots are cleaned when loaded. A stuck recovery can be discarded.
+- **Auto presets restore exactly what was there,** Night Shift included, and no longer replace your own Undo.
+- **Undo Last Apply is ⌥⌘Z,** so ⌘Z stays text Undo.
 
 ## Highlights
 
@@ -22,7 +27,7 @@ Research-based display settings for gaming and editing on Apple Silicon Macs. Pi
 
 ## Install
 
-Download **DisplayTuner-1.2.0-macOS.zip**, unzip it, and move **Display Tuner.app** to Applications. Requires Apple Silicon and macOS 26 or later. The app is ad-hoc signed, not notarized: on first launch, approve it in System Settings → Privacy & Security. SHA256SUMS.txt accompanies the download.
+Download **GamutPro-1.2.0-macOS.zip**, unzip it, and move **Gamut Pro.app** to Applications. It replaces Display Tuner and keeps its settings. Requires Apple Silicon and macOS 26 or later. The app is ad-hoc signed, not notarized: on first launch, approve it in System Settings → Privacy & Security. SHA256SUMS.txt accompanies the download.
 
 ## Limits
 

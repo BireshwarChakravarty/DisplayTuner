@@ -75,7 +75,7 @@ public struct MonitorProfile: Hashable, Codable, Sendable, Identifiable {
     public func source(_ id: String) -> Source? { sources.first { $0.id == id } }
 }
 
-/// The research behind Display Tuner. It covers one monitor, the Acer Nitro
+/// The research behind Gamut Pro. It covers one monitor, the Acer Nitro
 /// XV272K V5. Every fact below was read in the cited source; where the V5's
 /// own documentation couldn't be obtained, the fact names the sibling model
 /// it comes from.
@@ -108,7 +108,7 @@ public enum KnowledgeBase {
             Fact("HDR certification", "VESA DisplayHDR 400 (CTS 1.1)",
                  basis: "VESA's list of certified products names the XV272K V5",
                  sources: ["vesa-displayhdr-list"]),
-            Fact("4K at 160 Hz", "DisplayPort or USB-C only; set System → Max Refresh Rate to 160Hz",
+            Fact("4K at 160 Hz", "Over DisplayPort or USB-C; set System → Max Refresh Rate to 160Hz",
                  basis: "Acer's XV275K manual, the closest model with the same DFR switch",
                  sources: ["acer-manual-xv275k"]),
             Fact("DFR", "Switches between 3840 × 2160 at 160 Hz and 1920 × 1080 at 320 Hz",
@@ -116,14 +116,14 @@ public enum KnowledgeBase {
             Fact("Max Brightness", "Picture menu, Off by default: \"The default brightness is set to a low level to save energy\"",
                  basis: "Acer's XV275K manual", sources: ["acer-manual-xv275k"]),
             Fact("Max Brightness Off vs On", "Brightness 100 gave 139 cd/m² Off and 280 cd/m² On",
-                 basis: "Measured on the XV282K KV", sources: ["pcmonitors-xv282k"]),
+                 basis: "Measured on the XV282K KV (whether the V5 has the switch is unconfirmed)", sources: ["pcmonitors-xv282k"]),
             Fact("Brightness range", "40.1 cd/m² at Brightness 0 to 388.7 cd/m² at Brightness 100",
                  basis: "Measured on the XV272K V3", sources: ["danawa-xv272kv3"]),
             Fact("Static contrast", "1043:1 at Brightness 100",
                  basis: "Measured on the XV272K V3", sources: ["danawa-xv272kv3"]),
             Fact("Native gamut", "94.52% of P3 and 99.96% of sRGB in the default mode",
                  basis: "Measured on the XV272K V3", sources: ["danawa-xv272kv3"]),
-            Fact("HDR peak", "332 cd/m² on a 10% window, below the 388.7 cd/m² SDR maximum",
+            Fact("HDR peak", "About 330 cd/m², below the 388.7 cd/m² SDR maximum",
                  basis: "Measured on the XV272K V3", sources: ["danawa-xv272kv3"]),
             Fact("Colour Space", "General by default; sRGB, Rec.709, DCI, EBU, SMPTE-C and HDR also offered",
                  basis: "Acer's XV275K manual", sources: ["acer-manual-xv275k"]),
@@ -133,63 +133,60 @@ public enum KnowledgeBase {
             Fact("Colour Temp.", "Warm by default; measured 6067 K at default",
                  basis: "Acer's XV275K manual; measured on the XV272K V3",
                  sources: ["acer-manual-xv275k", "danawa-xv272kv3"]),
-            Fact("Contrast", "50 by default; calibrations used 48–49",
-                 basis: "Measured on the XV273K; calibrations of the XV272U KV, VX282K and XV273K",
+            Fact("Contrast", "50 in the default settings; Tom's Hardware's calibration used 49",
+                 basis: "TFTCentral's default settings for the XV273K; Tom's Hardware's calibration of the XV272U KV",
                  sources: ["tftcentral-xv273k", "tomshw-xv272u"]),
-            Fact("Over Drive overshoot", "Off 0%, Normal 13.7%, Extreme 85.5% (response 5.2 / 3 / 1.7 ms)",
-                 basis: "Measured on the XV272K V3 at 160 Hz", sources: ["danawa-xv272kv3"]),
+            Fact("Over Drive overshoot", "Off 0%, Normal 13.7%, maximum 85.5% (response 5.2 / 3 / 1.7 ms)",
+                 basis: "Measured on the XV272K V3", sources: ["danawa-xv272kv3"]),
             Fact("ACM", "Dynamic contrast, Off by default", basis: "Acer's XV275K and XV272U V manuals",
                  sources: ["acer-manual-xv275k", "acer-manual-xv272uv"])
         ],
         osd: [
-            OSDStep(
-                useCases: native,
-                setting: "Color Space", value: "General",
-                path: "Menu → Color → Color Space",
-                why: "General is the factory default and keeps the panel's native colour, which the display's own profile in macOS describes. Acer: any Color Space other than HDR sets Modes to Standard.",
-                sourceIDs: ["acer-manual-xv275k"]),
-            OSDStep(
-                useCases: editing,
-                setting: "Color Space", value: "sRGB",
-                path: "Menu → Color → Color Space",
-                why: "Clamps the panel to sRGB, matching the sRGB profile the app assigns. On the XV272K V3 it measured an average ΔE00 of 1.03. Sibling reviews found Contrast, Gamma and Colour Temp. locked in this colour space, while Brightness stays adjustable.",
-                sourceIDs: ["acer-manual-xv275k", "danawa-xv272kv3", "pcmonitors-xv282k"]),
+            // In the order to follow: a Mode resets the colour space on older
+            // models, and sRGB greys out picture settings on siblings, so
+            // Modes and the picture settings come before Color Space.
             OSDStep(
                 useCases: Set(UseCase.allCases),
                 setting: "Modes", value: "Standard",
                 path: "Menu → Color → Modes (or Hot Key 2)",
-                why: "Acer's factory default (\"Hot key2 (default: Standard mode)\"). Choosing a Color Space other than HDR returns Modes to Standard.",
-                sourceIDs: ["acer-manual-xv275k"]),
-            OSDStep(
-                useCases: native,
-                setting: "Max Brightness", value: "On",
-                path: "Menu → Picture → Max Brightness",
-                why: "Off by default to save energy, which caps the backlight: on the XV282K, Brightness 100 gave 139 cd/m² with it Off and 280 with it On. If your Picture menu has no Max Brightness item, skip this.",
-                sourceIDs: ["acer-manual-xv275k", "pcmonitors-xv282k"]),
+                why: "Acer's factory default (\"Hot key2 (default: Standard mode)\"). Set it before Color Space: on the older XV272U V, choosing a Mode sets the colour space back (\"the color space is auto set to “Standard”\"), while on the XV275K any Color Space other than HDR returns Modes to Standard.",
+                sourceIDs: ["acer-manual-xv275k", "acer-manual-xv272uv"]),
             OSDStep(
                 useCases: Set(UseCase.allCases),
                 setting: "ACM", value: "Off",
                 path: "Menu → Picture → ACM",
-                why: "ACM is Acer's dynamic contrast: it adjusts \"based on the current screen\". It's off by default, and PCMonitors found it biased towards high brightness on mixed content.",
+                why: "ACM is Acer's dynamic contrast: it adjusts \"based on the current screen\". It's off by default, and PCMonitors found it biased towards high brightness on mixed content (XV282K KV).",
                 sourceIDs: ["acer-manual-xv272uv", "acer-manual-xv275k", "pcmonitors-xv282k"]),
             OSDStep(
                 useCases: Set(UseCase.allCases).subtracting([.competitiveGaming]),
                 setting: "Black Boost", value: "0",
                 path: "Menu → Picture → Black Boost",
-                why: "Acer: Black Boost \"enhance[s] shadows by increasing the brightness without changing the lighter areas\". At 0, shadows are shown as the signal has them.",
+                why: "Acer: Black Boost will \"Enhance shadows by increasing the brightness without changing the lighter areas.\" At 0, shadows are shown as the signal has them.",
                 sourceIDs: ["acer-manual-xv275k"]),
             OSDStep(
                 useCases: [.competitiveGaming],
                 setting: "Black Boost", value: "0, or higher if dark areas hide detail",
                 path: "Menu → Picture → Black Boost",
-                why: "Acer: Black Boost \"enhance[s] shadows by increasing the brightness without changing the lighter areas\" (scale 0–10). It trades shadow depth for visibility.",
+                why: "Acer: Black Boost will \"Enhance shadows by increasing the brightness without changing the lighter areas\" (scale 0–10). It trades shadow depth for visibility.",
                 sourceIDs: ["acer-manual-xv275k"]),
             OSDStep(
-                useCases: Set(UseCase.allCases),
+                useCases: Set(UseCase.allCases).subtracting([.immersiveGaming]),
                 setting: "HDR", value: "Off",
                 path: "Menu → Picture → HDR",
                 why: "For standard-range content. The options are Off and Auto; with HDR on, Acer greys out Contrast, Gamma, ACM and Black Boost.",
                 sourceIDs: ["acer-manual-xv275k"]),
+            OSDStep(
+                useCases: [.immersiveGaming],
+                setting: "HDR", value: "Off, or Auto while playing HDR games and video",
+                path: "Menu → Picture → HDR",
+                why: "Acer: with Auto the \"HDR function is automatically applied\". Use it together with High Dynamic Range in System Settings. With HDR on, Acer greys out Contrast, Gamma, ACM and Black Boost, and the XV272K V3 peaked at about 330 cd/m² in HDR, below its 388.7 cd/m² SDR maximum.",
+                sourceIDs: ["acer-manual-xv275k", "danawa-xv272kv3"]),
+            OSDStep(
+                useCases: native,
+                setting: "Max Brightness", value: "On",
+                path: "Menu → Picture → Max Brightness",
+                why: "Off by default to save energy (\"The default brightness is set to a low level to save energy\"). On the XV282K KV, Brightness 100 gave 139 cd/m² with it Off and 280 with it On. If your Picture menu has no Max Brightness item, skip this.",
+                sourceIDs: ["acer-manual-xv275k", "pcmonitors-xv282k"]),
             OSDStep(
                 useCases: native,
                 setting: "Gamma", value: "2.2",
@@ -201,30 +198,48 @@ public enum KnowledgeBase {
                 setting: "Color Temp.", value: "Warm (factory default)",
                 path: "Menu → Color → Color Temp.",
                 why: "Acer's default. The XV272K V3 measured 6067 K at default, a little warmer than the D65 (about 6500 K) white of sRGB and Display P3. Normal and Cool weren't measured in any review found, so the app doesn't recommend them.",
-                sourceIDs: ["acer-manual-xv275k", "danawa-xv272kv3", "apple-display-p3"]),
+                sourceIDs: ["acer-manual-xv275k", "danawa-xv272kv3", "w3c-srgb", "apple-display-p3"]),
+            OSDStep(
+                useCases: native,
+                setting: "Color Space", value: "General",
+                path: "Menu → Color → Color Space",
+                why: "General is the factory default and keeps the panel's native colour, which the display's own profile in macOS describes.",
+                sourceIDs: ["acer-manual-xv275k"]),
+            OSDStep(
+                useCases: editing,
+                setting: "Color Space", value: "sRGB",
+                path: "Menu → Color → Color Space",
+                why: "Clamps the panel to sRGB, matching the sRGB profile the app assigns. On the XV272K V3 it measured an average ΔE00 of 1.03, and Danawa found brightness and most options still adjustable there. On the XV273K, TFTCentral found Contrast, Colour Temp. and Gamma unavailable in sRGB, and PCMonitors found gamma and the colour channels locked on the XV282K KV, with Brightness adjustable on both, so set the steps above first.",
+                sourceIDs: ["danawa-xv272kv3", "tftcentral-xv273k", "pcmonitors-xv282k"]),
             OSDStep(
                 useCases: native,
                 setting: "Over Drive", value: "Normal",
                 path: "Menu → Gaming → Over Drive",
-                why: "On the XV272K V3 at 160 Hz, Normal overshot 13.7% for a 3 ms response and Extreme 85.5% for 1.7 ms. Large overshoot shows as trails behind moving objects. TFTCentral found Extreme best on the XV273K at 120–144 Hz, so it may be worth trying.",
-                sourceIDs: ["danawa-xv272kv3", "tftcentral-xv273k"]),
+                why: "On the XV272K V3, Normal overshot 13.7% for a 3 ms response and the maximum setting 85.5% for 1.7 ms. Large overshoot shows as trails behind moving objects. TFTCentral found Extreme best on the XV273K only at 120–144 Hz, and on that model and older XV272s Over Drive is locked to Normal while variable refresh is on.",
+                sourceIDs: ["danawa-xv272kv3", "tftcentral-xv273k", "acer-manual-xv272kv3"]),
             OSDStep(
-                useCases: native,
+                useCases: [.competitiveGaming, .immersiveGaming],
                 setting: "Variable Refresh Rate", value: "On",
                 path: "Menu → Gaming → Variable Refresh Rate",
-                why: "Lets a source that supports Adaptive-Sync vary the refresh rate. On older XV272 models (FreeSync Premium in the menu), turning it on locks Over Drive to Normal.",
-                sourceIDs: ["acer-manual-xv275k", "acer-manual-xv272uv"]),
+                why: "Lets a source that supports Adaptive-Sync vary the refresh rate; Apple recommends it for games and video. On older XV272 models (FreeSync Premium in the menu), turning it on locks Over Drive to Normal.",
+                sourceIDs: ["acer-manual-xv275k", "acer-manual-xv272kv3", "apple-vrr"]),
             OSDStep(
                 useCases: Set(UseCase.allCases),
                 setting: "Max Refresh Rate", value: "160Hz",
                 path: "Menu → System → Max Refresh Rate",
-                why: "Acer: \"Setting max refresh rate to select OSD Menu > System > Max Refresh Rate > 160Hz.\" 4K at 160 Hz works over DisplayPort or USB-C.",
+                why: "Acer: \"Setting max refresh rate to select OSD Menu > System > Max Refresh Rate > 160Hz.\" 3840 × 2160 at 160 Hz \"can be supported by DisplayPort or USB Type-C\".",
                 sourceIDs: ["acer-manual-xv275k"]),
             OSDStep(
                 useCases: [.competitiveGaming],
                 setting: "DFR", value: "On only for 1080p at 320 Hz",
                 path: "Menu → System → DFR (or the DFR hot key)",
                 why: "Acer: \"DFR: Switch UHD 160Hz & FHD 320Hz resolution.\" It halves the resolution for twice the refresh rate.",
+                sourceIDs: ["acer-manual-xv275k"]),
+            OSDStep(
+                useCases: Set(UseCase.allCases).subtracting([.competitiveGaming]),
+                setting: "DFR", value: "Off",
+                path: "Menu → System → DFR (or the DFR hot key)",
+                why: "Acer: \"DFR: Switch UHD 160Hz & FHD 320Hz resolution.\" Off keeps the panel's full 3840 × 2160. DFR is the factory setting of Hot Key 1, so it's easy to turn on by accident.",
                 sourceIDs: ["acer-manual-xv275k"]),
             OSDStep(
                 useCases: Set(UseCase.allCases),
@@ -236,11 +251,11 @@ public enum KnowledgeBase {
                 useCases: Set(UseCase.allCases),
                 setting: "DDC/CI", value: "On",
                 path: "Menu → System → DDC/CI",
-                why: "Acer: \"Support monitor settings through software on your PC.\" Display Tuner uses it for brightness and contrast only.",
+                why: "Acer: \"Support monitor settings through software on your PC.\" Gamut Pro uses it for brightness and contrast only.",
                 sourceIDs: ["acer-manual-xv275k"])
         ],
         notes: [
-            "Display Tuner changes only brightness and contrast over DDC/CI. Acer's manual warns: \"Adjust only those controls that are covered by the operating instructions, since improper adjustment of other controls may result in damage.\"",
+            "Gamut Pro changes only brightness and contrast over DDC/CI. Acer's manual warns: \"Adjust only those controls that are covered by the operating instructions, since improper adjustment of other controls may result in damage.\"",
             "No instrumented review of the XV272K V5 itself exists yet, so measured figures come from its siblings, the XV272K V3 above all, and are labelled with the model."
         ],
         sources: [

@@ -58,6 +58,8 @@ final class AppModel: ObservableObject {
     /// presets the person had chosen before, to return to.
     @Published var autoState: AutoState?
     var autoBaseline: [UInt32: UseCase] = [:]
+    /// The settings before the first automatic preset, restored on leaving.
+    var autoSnapshot: Snapshot?
     var autoObserver: NSObjectProtocol?
     var autoTask: Task<Void, Never>?
     var hintPanels: [NSPanel] = []
@@ -72,10 +74,11 @@ final class AppModel: ObservableObject {
     /// DDC/CI pauses while displays sleep and for a few seconds after they
     /// wake: MonitorControl does the same because "some displays take time to
     /// recover".
-    private var displaysAsleep = false
+    private var screensAsleep = false
+    private var systemAsleep = false
     private var ddcPausedUntil = Date.distantPast
     private var sleepObservers: [NSObjectProtocol] = []
-    var ddcPaused: Bool { displaysAsleep || Date() < ddcPausedUntil }
+    var ddcPaused: Bool { screensAsleep || systemAsleep || Date() < ddcPausedUntil }
 
     init() {
         lighting = RoomLighting(rawValue: UserDefaults.standard.string(forKey: "lighting") ?? "") ?? .normal
@@ -114,7 +117,14 @@ final class AppModel: ObservableObject {
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+            Task { @MainActor in
+                guard let self else { return }
+                // Cables can move between ports without the display list
+                // changing, so find each monitor's DDC port again.
+                let ddc = self.ddc
+                self.ddcQueue.async { ddc.invalidate() }
+                self.refresh()
+            }
         }
     }
 
@@ -217,6 +227,7 @@ final class AppModel: ObservableObject {
 
     /// The recommendation's changes, with the mode the person picked (if any).
     func changes(for display: DisplayFacts) -> [PlannedChange] {
+        guard display.isSupported else { return [] } // other screens are never changed
         var changes = recommendation(for: display).changes
         if !display.hasCalibration {
             for (vcp, values) in [(VCP.brightness, manualBrightness), (VCP.contrast, manualContrast)] {
@@ -280,6 +291,22 @@ final class AppModel: ObservableObject {
         return applied
     }
 
+    /// A faster refresh rate at the current size, when the Acer runs slower
+    /// than its preset would choose (Video Editing prefers a frame-rate multiple).
+    func fasterMode(for display: DisplayFacts) -> DisplayMode? {
+        guard display.isSupported, display.mirrorOf == nil, let current = display.currentMode else { return nil }
+        let policy: ModePicker.RefreshPolicy = useCase(for: display.id) == .videoEditing ? .videoFriendly : .highest
+        guard let best = ModePicker.bestMode(for: current.layout, in: display.modes, policy: policy),
+              best.refreshRate > current.refreshRate + 1 else { return nil }
+        return best
+    }
+
+    /// Change only the refresh rate, with the usual keep-or-revert countdown.
+    func applyRefreshOnly(_ mode: DisplayMode, for display: DisplayFacts) async {
+        chooseMode(mode, for: display)
+        await apply(to: [display.id], only: ["mode"])
+    }
+
     // MARK: Live controls (menu bar)
 
     /// Whether the menu-bar slider can move this monitor's backlight.
@@ -319,6 +346,22 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Drop slider values that haven't been sent yet, so they can't land
+    /// after an apply or restore has read the monitor.
+    private func stopLiveWrites() {
+        liveTarget.removeAll()
+    }
+
+    /// Give up on an interrupted change that can't be restored (for example,
+    /// because a display is gone for good), so the app is usable again.
+    func discardRecovery() {
+        guard recoveryRequired, !isBusy else { return }
+        SnapshotStore.remove(.pending)
+        pendingSnapshot = nil
+        recoveryRequired = false
+        notice = "Recovery discarded. Your current settings stay as they are."
+    }
+
     func setNightShiftNow(_ on: Bool) {
         guard !isBusy, confirmation == nil else { return }
         if isDemo { nightShiftEnabled = on; return }
@@ -330,7 +373,7 @@ final class AppModel: ObservableObject {
     /// switching) never changes resolution or refresh rate, so it never needs
     /// the keep-or-revert countdown.
     @discardableResult
-    func apply(to ids: [UInt32], automatic: Bool = false) async -> [ApplyResult] {
+    func apply(to ids: [UInt32], automatic: Bool = false, only: Set<String>? = nil) async -> [ApplyResult] {
         guard canChange else { return [] }
         if ddcPaused {
             if !automatic {
@@ -341,12 +384,14 @@ final class AppModel: ObservableObject {
         }
         isBusy = true
         defer { isBusy = false }
+        stopLiveWrites()
         if !automatic { endAutoSwitch() } // the person's own choice wins
 
         refresh() // capture current modes, profiles and Night Shift before planning
         let plan: [(DisplayFacts, [PlannedChange])] = ids.compactMap { id in
             guard let display = displays.first(where: { $0.id == id }) else { return nil }
             let selected = changes(for: display).filter { change in
+                if let only, !only.contains(change.id) { return false }
                 guard isOn(change, for: display) else { return false }
                 if automatic, case .mode = change.change { return false }
                 return true
@@ -367,11 +412,17 @@ final class AppModel: ObservableObject {
             snapshot = try await takeSnapshot(of: plan)
             let original = originalSnapshot?.keepingOriginals(addingFrom: snapshot) ?? snapshot
             try SnapshotStore.save(original, as: .original)
-            try SnapshotStore.save(snapshot, as: .last)
             try SnapshotStore.save(snapshot, as: .pending)
             originalSnapshot = original
-            lastSnapshot = snapshot
             pendingSnapshot = snapshot
+            if automatic {
+                // Undo stays with the person's own last change; leaving the
+                // app restores what was there before the first automatic one.
+                if autoSnapshot == nil { autoSnapshot = snapshot }
+            } else {
+                try SnapshotStore.save(snapshot, as: .last)
+                lastSnapshot = snapshot
+            }
         } catch {
             results = [ApplyResult(display: "", title: "Changes stopped safely", ok: false, message: error.localizedDescription)]
             return results
@@ -478,8 +529,8 @@ final class AppModel: ObservableObject {
             // Only the controls Acer documents in the Picture menu. The manual
             // warns that "improper adjustment of other controls may result in
             // damage", and it documents no DDC/CI colour presets.
-            guard target.vcp == VCP.brightness || target.vcp == VCP.contrast else {
-                return result(false, "Display Tuner only changes brightness and contrast over DDC/CI.")
+            guard DDCPolicy.writable.contains(target.vcp), display.isSupported else {
+                return result(false, "Gamut Pro only changes brightness and contrast over DDC/CI.")
             }
             guard let current = display.ddc.values[target.vcp] else {
                 return result(false, "The monitor didn't report this control over DDC/CI.")
@@ -530,8 +581,13 @@ final class AppModel: ObservableObject {
     }
 
     func keepChanges() {
-        for (id, mode) in sessionModes where displays.contains(where: { $0.id == id }) {
-            _ = DisplayModes.apply(mode, to: id, permanent: true)
+        refresh()
+        for (id, mode) in sessionModes {
+            // Only make permanent what the display is actually showing now.
+            guard displays.first(where: { $0.id == id })?.currentMode?.matches(mode) == true else { continue }
+            if !DisplayModes.apply(mode, to: id, permanent: true) {
+                notice = "\(mode.label) stays for this session only; macOS didn't save it for next time."
+            }
         }
         sessionModes.removeAll()
         pendingSnapshot = nil
@@ -566,9 +622,16 @@ final class AppModel: ObservableObject {
         await restore(originalSnapshot)
     }
 
+    /// Put back the settings from before automatic presets took over.
+    func restoreAfterAuto(_ snapshot: Snapshot) async {
+        await restore(snapshot)
+    }
+
     private func restore(_ snapshot: Snapshot) async {
         guard !isBusy && !isDemo else { return }
+        let snapshot = snapshot.sanitized()
         isBusy = true
+        stopLiveWrites()
         refresh()
         defer { isBusy = false }
 
@@ -593,22 +656,21 @@ final class AppModel: ObservableObject {
                                               message: ok ? "Back to \(url?.deletingPathExtension().lastPathComponent ?? "the display's own profile")." : "ColorSync didn't accept the change."))
             }
 
-            if !saved.ddc.isEmpty && display.mirrorOf == nil && ddcPaused {
+            // Brightness and contrast only, on the supported monitor only,
+            // capped at the maximum the monitor reports now.
+            let values = display.isSupported ? saved.ddc.filter { DDCPolicy.writable.contains($0.key) } : [:]
+            if !values.isEmpty && display.mirrorOf == nil && ddcPaused {
                 newResults.append(ApplyResult(display: display.name, title: "Monitor settings", ok: false,
                     message: "The display is asleep or has just woken. Try Undo again in a few seconds."))
-            } else if !saved.ddc.isEmpty && display.mirrorOf == nil {
+            } else if !values.isEmpty && display.mirrorOf == nil {
                 let identity = DisplayIdentity(id: display.id, name: display.name)
                 let ddc = self.ddc
-                let values = saved.ddc
                 let failed = await onDDCQueue { () -> [UInt8] in
-                    let ordered = values.keys.sorted { a, b in
-                        if a == b { return false }
-                        if a == VCP.colorPreset { return true }
-                        if b == VCP.colorPreset { return false }
-                        return a < b
-                    }
-                    return ordered.compactMap { vcp in
-                        guard let value = values[vcp], ddc.write(vcp, value: value, for: identity) else { return vcp }
+                    values.keys.sorted().compactMap { vcp in
+                        guard let saved = values[vcp], let now = ddc.read(vcp, for: identity), now.max > 0 else { return vcp }
+                        let value = min(saved, now.max)
+                        if now.current == value { return nil }
+                        guard ddc.write(vcp, value: value, for: identity) else { return vcp }
                         usleep(150_000)
                         return ddc.read(vcp, for: identity)?.current == value ? nil : vcp
                     }
@@ -647,20 +709,24 @@ final class AppModel: ObservableObject {
     /// after they wake, then read the monitor afresh.
     private func watchSleep() {
         let center = NSWorkspace.shared.notificationCenter
-        for name in [NSWorkspace.screensDidSleepNotification, NSWorkspace.willSleepNotification] {
-            sleepObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor in self?.displaysAsleep = true }
-            })
-        }
-        for name in [NSWorkspace.screensDidWakeNotification, NSWorkspace.didWakeNotification] {
+        let events: [(Notification.Name, Bool, Bool)] = [
+            (NSWorkspace.screensDidSleepNotification, true, true), (NSWorkspace.willSleepNotification, false, true),
+            (NSWorkspace.screensDidWakeNotification, true, false), (NSWorkspace.didWakeNotification, false, false)
+        ]
+        for (name, screens, asleep) in events {
             sleepObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor in
                     guard let self else { return }
-                    self.displaysAsleep = false
+                    if screens { self.screensAsleep = asleep } else { self.systemAsleep = asleep }
+                    if asleep { return }
                     self.ddcPausedUntil = Date().addingTimeInterval(3)
                     try? await Task.sleep(nanoseconds: 3_200_000_000)
-                    guard !self.displaysAsleep else { return }
+                    guard !self.screensAsleep, !self.systemAsleep else { return }
                     self.refresh(rescan: true)
+                    // A revert that failed while the display was away gets one more try.
+                    if self.recoveryRequired, let pending = self.pendingSnapshot, !self.isBusy {
+                        await self.restore(pending)
+                    }
                 }
             })
         }
@@ -672,7 +738,7 @@ enum SnapshotStore {
     enum Name: String {
         /// Before the most recent apply.
         case last
-        /// Before Display Tuner first changed each setting.
+        /// Before Gamut Pro first changed each setting.
         case original
         case pending
     }
@@ -685,7 +751,7 @@ enum SnapshotStore {
     static func load(_ name: Name) -> Snapshot? {
         let url = directory.appendingPathComponent("\(name.rawValue).json")
         guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode(Snapshot.self, from: data)
+        return (try? JSONDecoder().decode(Snapshot.self, from: data))?.sanitized()
     }
 
     static func save(_ snapshot: Snapshot, as name: Name) throws {

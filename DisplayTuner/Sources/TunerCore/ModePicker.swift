@@ -2,15 +2,17 @@ import Foundation
 
 /// Chooses desktop sizes and refresh rates from the modes a display offers.
 public enum ModePicker {
-    /// macOS's interface is drawn for roughly 110 points per inch (and twice
-    /// that in pixels on HiDPI). Sizes near it look like a Mac should.
+    /// Apple's desktop Retina display (Studio Display, 218 pixels per inch)
+    /// shows about 109 points per inch at its default 2× size. Apple states
+    /// no target; sizes near this look like a Mac's own display.
     public static let idealPointsPerInch = 110.0
 
     public enum RefreshPolicy: Sendable {
         /// The fastest rate available.
         case highest
-        /// A rate that divides evenly by 24, 25 or 30 fps footage, preferring
-        /// one that fits both 24 and 30 (120 Hz), so playback has no judder.
+        /// A rate that divides evenly by both 24 and 30 fps footage (120 Hz),
+        /// or failing that by 24, so playback has no judder. 25/50 fps
+        /// footage isn't considered.
         case videoFriendly
     }
 
@@ -87,11 +89,13 @@ public enum ModePicker {
         let nativeTop = modes.filter { $0.pixelWidth >= native.width }.map(\.refreshRate).max() ?? 0
         return modes
             .filter { $0.usableForDesktop && $0.refreshRate > nativeTop + 1 }
-            .max { ($0.refreshRate, $0.pixelWidth) < ($1.refreshRate, $1.pixelWidth) }
+            // Ties prefer a plain (non-HiDPI) mode, then the larger one.
+            .max { ($0.refreshRate, $0.isHiDPI ? 0 : 1, $0.pixelWidth) < ($1.refreshRate, $1.isHiDPI ? 0 : 1, $1.pixelWidth) }
     }
 
     /// Modes worth offering in a picker: every sharp layout at each of its
-    /// refresh rates, plus any faster low-resolution mode. Fastest first.
+    /// refresh rates, smallest and slowest first, then any faster
+    /// low-resolution mode.
     public static func menuModes(_ modes: [DisplayMode]) -> [DisplayMode] {
         let sharp = Set(sharpLayouts(modes))
         var seen = Set<String>()

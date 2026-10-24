@@ -72,7 +72,7 @@ struct ContentView: View {
                 case .studio:
                     if let display = model.selectedDisplay, !display.isSupported {
                         ContentUnavailableView("Not Supported", systemImage: "display.trianglebadge.exclamationmark",
-                                               description: Text("Display Tuner is built for the Acer Nitro XV272K V5 and leaves \(display.name) alone."))
+                                               description: Text("Gamut Pro is built for the Acer Nitro XV272K V5 and leaves \(display.name) alone."))
                     } else if let display = model.selectedDisplay {
                         DisplayDetailView(display: display)
                     } else {
@@ -179,6 +179,6 @@ struct ConfirmView: View {
 }
 
 extension DisplayFacts {
-    /// Display Tuner only changes the Acer Nitro XV272K V5.
+    /// Gamut Pro only changes the Acer Nitro XV272K V5.
     var isSupported: Bool { KnowledgeBase.match(name: name, vendorID: vendorID) != nil }
 }

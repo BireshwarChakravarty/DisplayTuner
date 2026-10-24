@@ -246,13 +246,84 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(acerRec.notes.contains { $0.contains("ARZOPA mirrors this screen") })
     }
 
-    func testNoDDCMeansNoHardwareChanges() {
+    func testNoDDCMeansNoHardwareChangesAndSaysSo() {
         let acer = Fixtures.acer(ddc: .unavailable)
-        let rec = RecommendationEngine.recommend(.photoEditing, for: acer, context: context([acer]))
+        let rec = RecommendationEngine.recommend(.maxBrightness, for: acer, context: context([acer]))
         XCTAssertNil(change("ddc-brightness", in: rec))
-        XCTAssertTrue(rec.notes.contains { $0.contains("DDC/CI") })
+        XCTAssertTrue(rec.notes.contains { $0.contains("isn't answering DDC/CI") })
     }
 
+    /// Only brightness is ever planned over DDC/CI, and only to 100%.
+    func testOnlyBrightnessIsEverPlannedOverDDC() {
+        let acer = Fixtures.acer(ddc: .available([
+            VCP.brightness: VCPValue(current: 40, max: 100),
+            VCP.contrast: VCPValue(current: 70, max: 100),
+            VCP.colorPreset: VCPValue(current: 5, max: 11)
+        ]))
+        for useCase in UseCase.allCases {
+            let rec = RecommendationEngine.recommend(useCase, for: acer, context: context([acer]))
+            for planned in rec.changes {
+                guard case .ddc(let target) = planned.change else { continue }
+                XCTAssertEqual(target.vcp, VCP.brightness, "\(useCase)")
+                XCTAssertTrue(DDCPolicy.writable.contains(target.vcp))
+            }
+        }
+    }
+
+    func testMonitorChecklistOrderAndScope() {
+        let acer = Fixtures.acer()
+        for useCase in UseCase.allCases {
+            let steps = RecommendationEngine.recommend(useCase, for: acer, context: context([acer])).manualSteps
+                .filter { $0.place == .monitorMenu }
+            let names = steps.map(\.setting)
+            XCTAssertEqual(names.filter { $0 == "Color Space" }.count, 1, "\(useCase)")
+            XCTAssertEqual(Set(names).count, names.count, "duplicate steps in \(useCase)")
+            // A Mode resets the colour space on older models, and sRGB greys
+            // out picture settings, so those come first.
+            let colorSpace = names.firstIndex(of: "Color Space")!
+            for earlier in ["Modes", "ACM", "Black Boost", "HDR"] {
+                XCTAssertLessThan(names.firstIndex(of: earlier)!, colorSpace, "\(earlier) in \(useCase)")
+            }
+            if useCase.isEditing {
+                XCTAssertEqual(steps.first { $0.setting == "Color Space" }?.value, "sRGB")
+                for locked in ["Gamma", "Color Temp.", "Max Brightness", "Over Drive"] {
+                    XCTAssertFalse(names.contains(locked), "\(locked) in \(useCase)")
+                }
+            }
+            XCTAssertEqual(steps.first { $0.setting == "DFR" }?.value == "Off", useCase != .competitiveGaming)
+        }
+    }
+
+    func testVariableRefreshOnlyForGames() {
+        let acer = Fixtures.acer()
+        for useCase in UseCase.allCases {
+            let rec = RecommendationEngine.recommend(useCase, for: acer, context: context([acer]))
+            let variable = rec.manualSteps.contains { $0.setting == "Refresh Rate" && $0.value.hasPrefix("Variable") }
+            XCTAssertEqual(variable, useCase.isGaming, "\(useCase)")
+        }
+    }
+
+    func testMirroredAcerStillGetsItsMonitorChecklist() {
+        var acer = Fixtures.acer()
+        acer.mirrorOf = 9
+        let rec = RecommendationEngine.recommend(.photoEditing, for: acer, context: context([acer]))
+        XCTAssertNil(change("mode", in: rec))
+        XCTAssertTrue(rec.manualSteps.contains { $0.setting == "Color Space" && $0.value == "sRGB" })
+    }
+
+    func testAnExtendedUnknownMonitorIsLeftAlone() {
+        var other = Fixtures.acer()
+        other.id = 7
+        other.name = "DELL U2723QE"
+        other.vendorID = 0x10AC
+        for useCase in UseCase.allCases {
+            let rec = RecommendationEngine.recommend(useCase, for: other, context: context([other]))
+            XCTAssertNil(rec.profile)
+            XCTAssertTrue(rec.changes.isEmpty)
+            XCTAssertTrue(rec.manualSteps.isEmpty)
+            XCTAssertTrue(rec.modeOptions.isEmpty)
+        }
+    }
 }
 
 final class DDCPacketTests: XCTestCase {
@@ -277,6 +348,22 @@ final class DDCPacketTests: XCTestCase {
 }
 
 final class SnapshotTests: XCTestCase {
+    func testSanitizedKeepsOnlyBrightnessAndContrastOnTheAcer() {
+        let snapshot = Snapshot(displays: [
+            DisplaySnapshot(key: "acer", name: "XV272K V5", mode: nil, hadCustomProfile: false, customProfilePath: nil,
+                            ddc: [VCP.brightness: 60, VCP.contrast: 50, VCP.colorPreset: 2, 0x04: 1, 0xD6: 5]),
+            DisplaySnapshot(key: "other", name: "ARZOPA", mode: nil, hadCustomProfile: false, customProfilePath: nil,
+                            ddc: [VCP.brightness: 80])
+        ], nightShiftEnabled: nil)
+        let clean = snapshot.sanitized()
+        XCTAssertEqual(clean.display("acer")?.ddc, [VCP.brightness: 60, VCP.contrast: 50])
+        XCTAssertEqual(clean.display("other")?.ddc, [:])
+    }
+
+    func testRawValuesAreClampedToTheReportedMaximum() {
+        XCTAssertEqual(DDCTarget(vcp: VCP.brightness, value: .raw(500)).rawValue(max: 100), 100)
+    }
+
     func testOriginalsAreKept() {
         let a = Snapshot(displays: [DisplaySnapshot(key: "k", name: "A", mode: nil, hadCustomProfile: false,
                                                     customProfilePath: nil, ddc: [0x10: 80])],

@@ -1,13 +1,13 @@
 <div align="center">
-  <img src="docs/icon.png" width="128" alt="Display Tuner icon" />
-  <h1>Display Tuner</h1>
-  <p><strong>Research-based display settings for gaming and editing on the Mac.</strong></p>
-  <p><a href="https://github.com/BireshwarChakravarty/DisplayTuner/releases/latest">Download Display Tuner 1.1</a> · <a href="DisplayTuner/README.md">Technical guide & research</a></p>
+  <img src="docs/icon.png" width="128" alt="Gamut Pro icon" />
+  <h1>Gamut Pro</h1>
+  <p><strong>Researched settings for the Acer Nitro XV272K V5 on a Mac.</strong></p>
+  <p><a href="https://github.com/BireshwarChakravarty/DisplayTuner/releases/latest">Download Gamut Pro 1.2</a> · <a href="DisplayTuner/README.md">Technical guide & research</a></p>
 </div>
 
 ## What it does
 
-Display Tuner is built for one monitor, the **Acer Nitro XV272K V5**, on an Apple Silicon Mac. Pick what you're doing, review exactly what will change, and apply it, with your previous settings saved for Undo. Other screens are listed but never touched.
+Gamut Pro is built for one monitor, the **Acer Nitro XV272K V5**, on an Apple Silicon Mac. Pick what you're doing, review exactly what will change, and apply it, with your previous settings saved for Undo. Other screens are listed but never touched.
 
 - **Seven presets:** Competitive Gaming, Immersive Gaming, Photo Editing, Video Editing, MacBook Look, Max Brightness and Everyday.
 - **Research you can check:** every fact and monitor-menu step comes from Acer's manuals, VESA's DisplayHDR list, instrumented reviews or Apple's support pages, and links to its source. Figures measured on sibling models say which model.
@@ -18,7 +18,7 @@ Display Tuner is built for one monitor, the **Acer Nitro XV272K V5**, on an Appl
 
 ## Install
 
-Download the ZIP from [Releases](https://github.com/BireshwarChakravarty/DisplayTuner/releases), unzip, and drag **Display Tuner.app** to Applications. Requires Apple Silicon and macOS 26 or later.
+Download the ZIP from [Releases](https://github.com/BireshwarChakravarty/DisplayTuner/releases), unzip, and drag **Gamut Pro.app** to Applications. Requires Apple Silicon and macOS 26 or later.
 
 The community build is ad-hoc signed and not notarized. macOS may ask you to approve opening it under **System Settings → Privacy & Security**. Verify the download using the supplied SHA256SUMS.txt.
 
@@ -40,10 +40,10 @@ python3 scripts/test-core-portable.py  # fallback when Command Line Tools lack X
 ## Explore safely
 
 ```sh
-open "DisplayTuner/.build/app/Display Tuner.app" --args --demo
+open "DisplayTuner/.build/app/Gamut Pro.app" --args --demo
 ```
 
-Demo displays are clearly labeled. Hardware writes, saved presets and full-screen patterns are disabled in this mode.
+Demo displays are clearly labeled. Nothing is sent to any display, and your saved presets and activity aren't shown or changed.
 
 ## Keyboard shortcuts
 
@@ -52,7 +52,7 @@ Demo displays are clearly labeled. Hardware writes, saved presets and full-scree
 | ⌘1–⌘4 | Switch workspace sections |
 | ⌘R | Rescan displays and DDC controls |
 | ⌘Return | Apply the selected display’s tuning plan |
-| ⌘Z | Undo last apply |
+| ⌥⌘Z | Undo last apply |
 | ⇧⌘E | Export diagnostics |
 | Esc | Revert an unconfirmed mode change / close a test pattern |
 

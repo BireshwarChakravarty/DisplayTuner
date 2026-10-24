@@ -18,7 +18,7 @@ struct SavedPresetsView: View {
                             Image(systemName: preset.useCase.symbol).font(.title2).foregroundStyle(.tint).frame(width: 32)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(preset.name).font(.headline)
-                                Text("\(preset.displayName) · \(preset.useCase.title) · \(preset.lighting.title) room")
+                                Text("\(preset.displayName) · \(preset.useCase.title)")
                                     .font(.callout).foregroundStyle(.secondary)
                                 if let mode = preset.mode { Text(mode.label).font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
                             }
@@ -103,21 +103,23 @@ struct StudioSettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Startup") {
-                Toggle("Open Display Tuner at login", isOn: Binding(get: { loginEnabled }, set: { value in
+                Toggle("Open Gamut Pro at login", isOn: Binding(get: { loginEnabled }, set: { value in
                     do {
                         if value { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
                         loginEnabled = SMAppService.mainApp.status == .enabled
-                        if SMAppService.mainApp.status == .requiresApproval { error = "Approve Display Tuner in System Settings → General → Login Items." }
+                        error = nil
+                        if SMAppService.mainApp.status == .requiresApproval { error = "Approve Gamut Pro in System Settings → General → Login Items." }
                     } catch { self.error = error.localizedDescription }
                 }))
                 if let error { Text(error).font(.caption).foregroundStyle(.orange) }
             }
-            Section("About Display Tuner") {
-                HStack(spacing: 14) { AppMark().frame(width: 50, height: 50); VStack(alignment: .leading, spacing: 4) { Text("Display Tuner \(AppVersion.current)").font(.headline); Text("Research-based display settings for gaming and editing.").foregroundStyle(.secondary) } }
+            Section("About Gamut Pro") {
+                HStack(spacing: 14) { AppMark().frame(width: 50, height: 50); VStack(alignment: .leading, spacing: 4) { Text("Gamut Pro \(AppVersion.current)").font(.headline); Text("Researched settings for the Acer Nitro XV272K V5.").foregroundStyle(.secondary) } }
                 Link("Source, updates & releases", destination: URL(string: "https://github.com/BireshwarChakravarty/DisplayTuner")!)
-                Text("No analytics. No account. No subscription. DDC and Night Shift depend on monitor support and macOS private APIs. Brightness estimates are not colorimeter measurements.").font(.caption).foregroundStyle(.secondary)
+                Text("No analytics. No account. No subscription. DDC and Night Shift depend on monitor support and macOS private APIs. Brightness percentages aren't cd/m²; only a colorimeter measures that.").font(.caption).foregroundStyle(.secondary)
             }
         }.formStyle(.grouped).padding(10).frame(width: 520, height: 660)
+            .onAppear { loginEnabled = SMAppService.mainApp.status == .enabled }
             .preferredColorScheme(appearance == "light" ? .light : appearance == "dark" ? .dark : nil)
     }
 }

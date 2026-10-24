@@ -1,9 +1,14 @@
 import Foundation
 
 /// DDC/CI VCP feature codes (VESA MCCS).
+/// The only controls the app ever writes over DDC/CI: the brightness and
+/// contrast Acer documents in its Picture menu. Its manual warns that
+/// "improper adjustment of other controls may result in damage".
+public enum DDCPolicy {
+    public static let writable: Set<UInt8> = [VCP.brightness, VCP.contrast]
+}
+
 public enum VCP {
-    public static let restoreFactoryDefaults: UInt8 = 0x04
-    public static let restoreFactoryLuminanceContrast: UInt8 = 0x05
     public static let brightness: UInt8 = 0x10
     public static let contrast: UInt8 = 0x12
     /// Colour preset (non-continuous): see `ColorPreset`.
@@ -92,7 +97,7 @@ public struct DDCTarget: Hashable, Codable, Sendable {
 
     public func rawValue(max: UInt16) -> UInt16 {
         switch value {
-        case .raw(let v): return v
+        case .raw(let v): return Swift.min(v, max)
         case .percent(let p):
             let clamped = Swift.max(0, Swift.min(100, p))
             return UInt16((Double(clamped) / 100 * Double(max)).rounded())

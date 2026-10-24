@@ -14,6 +14,8 @@ struct DisplayDetailView: View {
     @ViewState private var expandedSteps: Set<String> = []
     @AppStorage("doneSteps") private var doneStepsRaw = ""
     @AppStorage("showInspector") private var showInspector = false
+    @ViewState private var confirmingRestore = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var rec: Recommendation { model.recommendation(for: display) }
     private var changes: [PlannedChange] { model.changes(for: display) }
@@ -51,8 +53,8 @@ struct DisplayDetailView: View {
                     Divider()
                     Button("Save as Preset…", systemImage: "square.and.arrow.down") { savingPreset = true }
                         .disabled(!editable || model.isDemo)
-                    Button("Restore Settings From Before Display Tuner", systemImage: "clock.arrow.circlepath") {
-                        Task { await model.restoreOriginals() }
+                    Button("Restore Settings From Before Gamut Pro…", systemImage: "clock.arrow.circlepath") {
+                        confirmingRestore = true
                     }
                     .disabled(model.originalSnapshot == nil || !model.canChange)
                     Divider()
@@ -68,8 +70,14 @@ struct DisplayDetailView: View {
         .alert("Save Preset", isPresented: $savingPreset) {
             TextField("Name", text: $presetName)
             Button("Save") { model.savePreset(name: presetName, display: display); presetName = "" }
+                .disabled(presetName.trimmingCharacters(in: .whitespaces).isEmpty)
             Button("Cancel", role: .cancel) {}
-        } message: { Text("Saves the activity, room lighting, display mode and brightness/contrast. Loading a preset lets you review it before applying.") }
+        } message: { Text("Saves the preset, display mode and brightness/contrast. Loading a preset lets you review it before applying.") }
+        .confirmationDialog("Restore the settings from before Gamut Pro?", isPresented: $confirmingRestore) {
+            Button("Restore") { Task { await model.restoreOriginals() } }
+        } message: {
+            Text("Puts back the resolution, colour profile, brightness, contrast and Night Shift recorded before Gamut Pro first changed them.")
+        }
     }
 
     // MARK: Hero
@@ -78,6 +86,8 @@ struct DisplayDetailView: View {
         HeroArtwork(useCase: useCase)
             .frame(height: 300)
             .backgroundExtensionEffect()
+            // A scrim so white text stays readable on light artwork.
+            .overlay(LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .top, endPoint: .bottom))
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: 18) {
                     HStack(alignment: .center, spacing: 20) {
@@ -95,19 +105,20 @@ struct DisplayDetailView: View {
                         }
                         .foregroundStyle(.white)
                         .shadow(color: .black.opacity(0.25), radius: 8, y: 2)
-                        .environment(\.colorScheme, .dark) // the hero is always dark, so its glass tags are too
+                        .environment(\.colorScheme, .dark) // the hero is always dark, so its tags are too
                     }
                     stats
                 }
                 .padding(.horizontal, 28).padding(.bottom, 22)
-                .frame(maxWidth: 980, alignment: .leading)
+                .frame(minWidth: 0, maxWidth: 980, alignment: .leading)
                 .frame(maxWidth: .infinity)
             }
     }
 
     private var stats: some View {
-        GlassEffectContainer(spacing: 10) {
-            HStack(spacing: 10) {
+        // Content, not controls: standard materials rather than Liquid Glass,
+        // and a grid that wraps so a narrow window or the inspector fits.
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 10, alignment: .leading)], alignment: .leading, spacing: 10) {
                 StatChip(title: "Refresh", value: display.currentMode?.refreshLabel ?? "—", symbol: "speedometer",
                          detail: fasterMode.map { "\($0.refreshLabel) available" } ?? "Fastest at this size",
                          warn: fasterMode != nil)
@@ -123,13 +134,12 @@ struct DisplayDetailView: View {
                             .font(.headline)
                             .padding(.horizontal, 6).padding(.vertical, 4)
                     }
-                    .buttonStyle(.glassProminent)
+                    .buttonStyle(.borderedProminent)
                     .tint(.orange)
                     .controlSize(.large)
                     .disabled(!model.canChange)
-                    .help("Same resolution at \(faster.refreshLabel): smoother motion and lower input lag. Review it under Changes, then Apply.")
+                    .help("Same resolution at \(faster.refreshLabel). Review it under Changes, then Apply.")
                 }
-            }
         }
     }
 
@@ -161,13 +171,7 @@ struct DisplayDetailView: View {
 
     private func percent(_ value: Double) -> String { "\(Int((value * 100).rounded()))%" }
 
-    /// The fastest mode at the current desktop size, when the display is running slower.
-    private var fasterMode: DisplayMode? {
-        guard display.mirrorOf == nil, let current = display.currentMode,
-              let best = ModePicker.bestMode(for: current.layout, in: display.modes, policy: .highest),
-              best.refreshRate > current.refreshRate + 1 else { return nil }
-        return best
-    }
+    private var fasterMode: DisplayMode? { model.fasterMode(for: display) }
 
     // MARK: Presets
 
@@ -177,22 +181,19 @@ struct DisplayDetailView: View {
                 SectionTitle("What are you doing?")
                 Spacer()
             }
-            ScrollView(.horizontal) {
-                HStack(spacing: 14) {
-                    ForEach(UseCase.allCases) { option in
-                        PresetCard(useCase: option, selected: option == useCase, summary: summary(for: option)) {
-                            withAnimation(.smooth) { model.setUseCase(option, for: display.id) }
-                        }
-                        .disabled(!editable)
+            // A wrapping grid, so all seven presets are always visible.
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 14)], spacing: 14) {
+                ForEach(UseCase.allCases) { option in
+                    PresetCard(useCase: option, selected: option == useCase, summary: summary(for: option)) {
+                        withAnimation(reduceMotion ? nil : .smooth) { model.setUseCase(option, for: display.id) }
                     }
+                    .disabled(!editable)
                 }
-                .padding(.vertical, 4)
             }
-            .scrollIndicators(.never)
         }
     }
 
-    /// What a preset will set, in a few words: "160 Hz · sRGB · 120 nits".
+    /// What a preset will set, in a few words: "160 Hz · sRGB".
     private func summary(for option: UseCase) -> String {
         var parts: [String] = []
         if display.mirrorOf == nil, let current = display.currentMode,
@@ -203,7 +204,7 @@ struct DisplayDetailView: View {
         if !display.hasCalibration {
             let wide = display.primaries?.isWideGamut ?? rec.profile?.specs.isWideGamut ?? false
             if option.isEditing && rec.profile?.specs.hasSRGBColorSpace == true { parts.append("sRGB") }
-            else if option == .macbookLook && wide { parts.append("P3 colour") }
+            else if option == .macbookLook && wide { parts.append("Native wide colour") }
             else { parts.append("Native colour") }
             if option == .maxBrightness || option == .macbookLook, display.ddc.values[VCP.brightness] != nil {
                 parts.append("Brightness 100")
@@ -314,7 +315,7 @@ struct DisplayDetailView: View {
                         GroupedSection(title: place.title, symbol: place.symbol, small: true, trailing: {
                             if place.place == .systemSettings {
                                 Button("Open Displays Settings…") { openDisplaySettings() }
-                                    .buttonStyle(.glass).controlSize(.small)
+                                    .buttonStyle(.bordered).controlSize(.small)
                             }
                         }) {
                             ForEach(Array(group.enumerated()), id: \.element.id) { index, step in
@@ -337,7 +338,10 @@ struct DisplayDetailView: View {
             VStack(spacing: 0) {
                 if !rec.modeOptions.isEmpty {
                     SettingRow(title: "Resolution & refresh rate", symbol: "display") {
-                        Picker("Resolution & refresh rate", selection: Binding(get: { model.pickerMode(for: display) },
+                        Picker("Resolution & refresh rate", selection: Binding(get: {
+                            // Show the matching menu entry, even if its mode ID differs.
+                            model.pickerMode(for: display).flatMap { selected in rec.modeOptions.first { $0.matches(selected) } }
+                        },
                                                                                set: { if let mode = $0 { model.chooseMode(mode, for: display) } })) {
                             ForEach(rec.modeOptions) { mode in Text(mode.label).tag(Optional(mode)) }
                         }
@@ -370,7 +374,8 @@ struct DisplayDetailView: View {
                 Slider(value: Binding(get: { value }, set: { new in
                     if vcp == VCP.brightness { model.manualBrightness[display.id] = new.rounded() }
                     else { model.manualContrast[display.id] = new.rounded() }
-                }), in: 0...100)
+                }), in: 0...100) { Text(title) }
+                .labelsHidden()
                 Text(available ? "\(Int(value))%" : "—").monospacedDigit().foregroundStyle(.secondary).frame(width: 40, alignment: .trailing)
             }
             .frame(maxWidth: 320)
@@ -393,7 +398,7 @@ struct DisplayDetailView: View {
     }
 
     private var applyBar: some View {
-        GlassEffectContainer(spacing: 14) {
+        GlassEffectContainer(spacing: 12) {
             HStack(spacing: 12) {
                 HStack(spacing: 12) {
                     Image(systemName: useCase.symbol).font(.title3).foregroundStyle(.tint).frame(width: 26)
@@ -406,11 +411,18 @@ struct DisplayDetailView: View {
                 .padding(.horizontal, 18).padding(.vertical, 10)
                 .glassEffect(.regular, in: .capsule)
                 Spacer(minLength: 12)
-                Button { Task { await model.undoLastApply() } } label: {
-                    Label("Undo", systemImage: "arrow.uturn.backward")
+                if model.recoveryRequired {
+                    Button("Discard") { model.discardRecovery() }
+                        .buttonStyle(.glass)
+                        .disabled(model.isBusy)
+                        .help("Stop trying to restore the interrupted change and keep the current settings")
+                } else {
+                    Button { Task { await model.undoLastApply() } } label: {
+                        Label("Undo", systemImage: "arrow.uturn.backward")
+                    }
+                    .buttonStyle(.glass)
+                    .disabled(model.lastSnapshot == nil || !model.canChange)
                 }
-                .buttonStyle(.glass)
-                .disabled(model.lastSnapshot == nil || !model.canChange)
                 Button {
                     Task {
                         if model.recoveryRequired { await model.undoLastApply() }
@@ -466,7 +478,7 @@ extension UseCase {
         case .photoEditing: return [Color(red: 0.55, green: 0.6, blue: 0.62), Color(red: 0.75, green: 0.72, blue: 0.66), Color(red: 0.35, green: 0.42, blue: 0.48), Color(red: 0.15, green: 0.17, blue: 0.2)]
         case .videoEditing: return [Color(red: 0.1, green: 0.35, blue: 0.6), Color(red: 0.95, green: 0.6, blue: 0.25), Color(red: 0.1, green: 0.2, blue: 0.35), Color(red: 0.05, green: 0.08, blue: 0.15)]
         case .macbookLook: return [Color(red: 0.2, green: 0.45, blue: 1), Color(red: 0.95, green: 0.35, blue: 0.6), Color(red: 0.5, green: 0.3, blue: 0.95), Color(red: 0.1, green: 0.1, blue: 0.35)]
-        case .maxBrightness: return [Color(red: 1, green: 0.85, blue: 0.35), Color(red: 1, green: 0.62, blue: 0.2), Color(red: 0.98, green: 0.95, blue: 0.85), Color(red: 0.45, green: 0.25, blue: 0.05)]
+        case .maxBrightness: return [Color(red: 0.95, green: 0.7, blue: 0.15), Color(red: 0.9, green: 0.45, blue: 0.1), Color(red: 0.98, green: 0.82, blue: 0.4), Color(red: 0.4, green: 0.2, blue: 0.05)]
         case .everyday: return [Color(red: 0.2, green: 0.6, blue: 0.95), Color(red: 0.35, green: 0.8, blue: 0.75), Color(red: 0.15, green: 0.4, blue: 0.75), Color(red: 0.05, green: 0.15, blue: 0.3)]
         }
     }
@@ -507,7 +519,7 @@ private struct HeroTag: View {
         Label(text, systemImage: symbol)
             .font(.caption.weight(.semibold))
             .padding(.horizontal, 10).padding(.vertical, 5)
-            .glassEffect(.regular, in: .capsule)
+            .background(.ultraThinMaterial, in: .capsule)
     }
 }
 
@@ -527,8 +539,8 @@ private struct StatChip: View {
             Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
-        .frame(minWidth: 130, alignment: .leading)
-        .glassEffect(.regular, in: .rect(cornerRadius: 18))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: .rect(cornerRadius: 18))
     }
 }
 
@@ -641,6 +653,7 @@ private struct PresetCard: View {
     let selected: Bool
     let summary: String
     let action: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ViewState private var hovered = false
 
     var body: some View {
@@ -658,7 +671,7 @@ private struct PresetCard: View {
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.white)
                             .frame(width: 24, height: 24)
-                            .glassEffect(.regular.tint(.accentColor), in: .circle)
+                            .background(Color.accentColor, in: .circle)
                             .padding(8)
                     }
                 }
@@ -677,7 +690,7 @@ private struct PresetCard: View {
             .overlay(RoundedRectangle(cornerRadius: 16)
                 .strokeBorder(selected ? Color.accentColor : Color(nsColor: .separatorColor).opacity(0.5), lineWidth: selected ? 2.5 : 1))
             .shadow(color: .black.opacity(hovered ? 0.18 : 0.08), radius: hovered ? 10 : 4, y: hovered ? 4 : 2)
-            .scaleEffect(hovered ? 1.02 : 1)
+            .scaleEffect(hovered && !reduceMotion ? 1.02 : 1)
             .animation(.smooth(duration: 0.2), value: hovered)
             .contentShape(.rect(cornerRadius: 16))
         }
@@ -773,6 +786,7 @@ private struct StepRow: View {
                 }
                 .buttonStyle(.plain).foregroundStyle(.secondary)
                 .help("Why")
+                .accessibilityLabel(expanded ? "Hide why" : "Why \(step.setting)")
             }
             if expanded {
                 VStack(alignment: .leading, spacing: 4) {

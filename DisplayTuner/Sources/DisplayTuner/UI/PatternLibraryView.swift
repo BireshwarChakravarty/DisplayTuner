@@ -97,7 +97,15 @@ struct PatternCanvas: View {
     }
 }
 
-private final class PatternWindow: NSWindow { override var canBecomeKey: Bool { true } }
+private final class PatternWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    // A borderless window has nothing focused for SwiftUI's exit command, so
+    // handle Esc here.
+    override func cancelOperation(_ sender: Any?) { close() }
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 { close() } else { super.keyDown(with: event) }
+    }
+}
 
 @MainActor
 final class PatternPresenter {
