@@ -1,8 +1,6 @@
 name: Publish Gamut Pro
+# Publishing only ever happens when someone starts this workflow by hand.
 on:
-  push:
-    branches: ["main", "claude/lucid-bell-7thkev"]
-    paths: ["release.json"]
   workflow_dispatch:
     inputs:
       replace:

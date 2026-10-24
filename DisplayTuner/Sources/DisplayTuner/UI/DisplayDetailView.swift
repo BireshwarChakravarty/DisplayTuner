@@ -83,12 +83,8 @@ struct DisplayDetailView: View {
     // MARK: Hero
 
     private var hero: some View {
-        HeroArtwork(useCase: useCase)
-            .frame(height: 300)
-            .backgroundExtensionEffect()
-            // A scrim so white text stays readable on light artwork.
-            .overlay(LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .top, endPoint: .bottom))
-            .overlay(alignment: .bottomLeading) {
+        // The artwork sits behind the content and takes its size, so wrapped
+        // stats in a narrow window never push the title out of view.
                 VStack(alignment: .leading, spacing: 18) {
                     HStack(alignment: .center, spacing: 20) {
                         MonitorGlyph(display: display, useCase: useCase)
@@ -109,10 +105,15 @@ struct DisplayDetailView: View {
                     }
                     stats
                 }
-                .padding(.horizontal, 28).padding(.bottom, 22)
+                .padding(.horizontal, 28).padding(.top, 40).padding(.bottom, 22)
                 .frame(minWidth: 0, maxWidth: 980, alignment: .leading)
-                .frame(maxWidth: .infinity)
-            }
+                .frame(maxWidth: .infinity, minHeight: 300, alignment: .bottomLeading)
+                .background {
+                    HeroArtwork(useCase: useCase)
+                        .backgroundExtensionEffect()
+                        // A scrim so white text stays readable on light artwork.
+                        .overlay(LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .top, endPoint: .bottom))
+                }
     }
 
     private var stats: some View {
