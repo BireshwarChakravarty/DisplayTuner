@@ -67,6 +67,15 @@ final class AppModel: ObservableObject {
     /// display, and which displays have a write in flight.
     private var liveTarget: [UInt32: UInt16] = [:]
     private var liveWriting: Set<UInt32> = []
+    /// Modes applied for this session only, made permanent when kept.
+    private var sessionModes: [UInt32: DisplayMode] = [:]
+    /// DDC/CI pauses while displays sleep and for a few seconds after they
+    /// wake: MonitorControl does the same because "some displays take time to
+    /// recover".
+    private var displaysAsleep = false
+    private var ddcPausedUntil = Date.distantPast
+    private var sleepObservers: [NSObjectProtocol] = []
+    var ddcPaused: Bool { displaysAsleep || Date() < ddcPausedUntil }
 
     init() {
         lighting = RoomLighting(rawValue: UserDefaults.standard.string(forKey: "lighting") ?? "") ?? .normal
@@ -101,6 +110,7 @@ final class AppModel: ObservableObject {
                     : "Recovered settings from an interrupted display change."
             }
         }
+        watchSleep()
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -139,6 +149,7 @@ final class AppModel: ObservableObject {
     /// Read brightness, contrast and colour preset from each external monitor,
     /// once, in the background.
     private func probeDDC() {
+        guard !ddcPaused else { return } // the wake handler probes again
         for display in displays where !display.isBuiltIn && display.mirrorOf == nil && ddcStatus[display.key] == nil {
             let key = display.key
             ddcStatus[key] = .probing
@@ -185,7 +196,7 @@ final class AppModel: ObservableObject {
 
     var context: EngineContext {
         EngineContext(lighting: lighting, allDisplays: displays, nightShiftEnabled: nightShiftEnabled,
-                      switchboardInstalled: switchboardInstalled, rememberedColorPresets: RememberedPresets.all)
+                      switchboardInstalled: switchboardInstalled)
     }
 
     func useCase(for id: UInt32) -> UseCase { useCases[id] ?? .everyday }
@@ -272,7 +283,7 @@ final class AppModel: ObservableObject {
 
     /// Whether the menu-bar slider can move this monitor's backlight.
     func canSetBrightnessLive(_ display: DisplayFacts) -> Bool {
-        !isBusy && confirmation == nil && !recoveryRequired && display.mirrorOf == nil
+        !isBusy && confirmation == nil && !recoveryRequired && !ddcPaused && display.mirrorOf == nil
             && !display.hasCalibration && display.ddc.values[VCP.brightness] != nil
     }
 
@@ -302,7 +313,7 @@ final class AppModel: ObservableObject {
         let ddc = self.ddc
         ddcQueue.async { [weak self] in
             _ = ddc.write(VCP.brightness, value: raw, for: identity)
-            usleep(40_000) // monitors drop commands sent back to back
+            usleep(100_000) // at most about ten writes a second while dragging
             Task { @MainActor [weak self] in self?.pumpLive(identity) }
         }
     }
@@ -320,6 +331,13 @@ final class AppModel: ObservableObject {
     @discardableResult
     func apply(to ids: [UInt32], automatic: Bool = false) async -> [ApplyResult] {
         guard canChange else { return [] }
+        if ddcPaused {
+            if !automatic {
+                results = [ApplyResult(display: "", title: "Waiting for the display", ok: false,
+                                       message: "The display is asleep or has just woken. Nothing was changed; try again in a few seconds.")]
+            }
+            return []
+        }
         isBusy = true
         defer { isBusy = false }
         if !automatic { endAutoSwitch() } // the person's own choice wins
@@ -441,7 +459,10 @@ final class AppModel: ObservableObject {
 
         switch planned.change {
         case .mode(let mode):
-            let ok = DisplayModes.apply(mode, to: display.id)
+            // For this session only until Keep: a crash or restart during the
+            // countdown can't leave an unconfirmed mode behind.
+            let ok = DisplayModes.apply(mode, to: display.id, permanent: false)
+            if ok { sessionModes[display.id] = mode }
             return result(ok, ok ? "Now \(mode.label)." : "macOS didn't accept \(mode.label).")
 
         case .colorProfile(let choice):
@@ -453,6 +474,12 @@ final class AppModel: ObservableObject {
             return result(ok, ok ? "Now using \(choice.label)." : "ColorSync didn't accept the change.")
 
         case .ddc(let target):
+            // Only the controls Acer documents in the Picture menu. The manual
+            // warns that "improper adjustment of other controls may result in
+            // damage", and it documents no DDC/CI colour presets.
+            guard target.vcp == VCP.brightness || target.vcp == VCP.contrast else {
+                return result(false, "Display Tuner only changes brightness and contrast over DDC/CI.")
+            }
             guard let current = display.ddc.values[target.vcp] else {
                 return result(false, "The monitor didn't report this control over DDC/CI.")
             }
@@ -468,11 +495,6 @@ final class AppModel: ObservableObject {
                 var values = ddcStatus[display.key]?.values ?? display.ddc.values
                 values[target.vcp] = readBack
                 ddcStatus[display.key] = .available(values)
-                // Remember the monitor's own preset before sRGB, so gaming can return to it.
-                if target.vcp == VCP.colorPreset, raw == ColorPreset.sRGB.rawValue, readBack.current == raw,
-                   current.current != ColorPreset.sRGB.rawValue {
-                    RememberedPresets.set(current.current, for: display.key)
-                }
             }
             let name = VCP.name(target.vcp)
             let shown: (UInt16) -> String = { value in
@@ -507,6 +529,10 @@ final class AppModel: ObservableObject {
     }
 
     func keepChanges() {
+        for (id, mode) in sessionModes where displays.contains(where: { $0.id == id }) {
+            _ = DisplayModes.apply(mode, to: id, permanent: true)
+        }
+        sessionModes.removeAll()
         pendingSnapshot = nil
         SnapshotStore.remove(.pending)
         confirmTask?.cancel()
@@ -515,6 +541,7 @@ final class AppModel: ObservableObject {
     }
 
     func revertUnconfirmed() async {
+        sessionModes.removeAll()
         confirmTask?.cancel()
         confirmTask = nil
         confirmation = nil
@@ -565,7 +592,10 @@ final class AppModel: ObservableObject {
                                               message: ok ? "Back to \(url?.deletingPathExtension().lastPathComponent ?? "the display's own profile")." : "ColorSync didn't accept the change."))
             }
 
-            if !saved.ddc.isEmpty && display.mirrorOf == nil {
+            if !saved.ddc.isEmpty && display.mirrorOf == nil && ddcPaused {
+                newResults.append(ApplyResult(display: display.name, title: "Monitor settings", ok: false,
+                    message: "The display is asleep or has just woken. Try Undo again in a few seconds."))
+            } else if !saved.ddc.isEmpty && display.mirrorOf == nil {
                 let identity = DisplayIdentity(id: display.id, name: display.name)
                 let ddc = self.ddc
                 let values = saved.ddc
@@ -608,6 +638,31 @@ final class AppModel: ObservableObject {
             pendingSnapshot = nil
             recoveryRequired = false
         } else if pendingSnapshot != nil { recoveryRequired = true }
+    }
+
+    // MARK: Sleep and wake
+
+    /// Pause DDC/CI while the screens or the Mac sleep, and for three seconds
+    /// after they wake, then read the monitor afresh.
+    private func watchSleep() {
+        let center = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.screensDidSleepNotification, NSWorkspace.willSleepNotification] {
+            sleepObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.displaysAsleep = true }
+            })
+        }
+        for name in [NSWorkspace.screensDidWakeNotification, NSWorkspace.didWakeNotification] {
+            sleepObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.displaysAsleep = false
+                    self.ddcPausedUntil = Date().addingTimeInterval(3)
+                    try? await Task.sleep(nanoseconds: 3_200_000_000)
+                    guard !self.displaysAsleep else { return }
+                    self.refresh(rescan: true)
+                }
+            })
+        }
     }
 }
 

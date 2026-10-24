@@ -53,6 +53,24 @@ final class Arm64DDC: @unchecked Sendable {
     }
 
     private var cache: [DisplayIdentity: IOAVService] = [:]
+    /// When the last I2C transaction ended. DDC/CI asks for at least 50 ms
+    /// after a write and between capabilities fragments (ddcutil quotes the
+    /// spec in parms.h); shorter gaps make monitors drop commands.
+    private var lastTransaction: UInt64 = 0
+    private static let minimumGap: UInt64 = 50_000_000
+
+    /// Wait until the bus has been quiet for `minimumGap`.
+    private func pace() {
+        let elapsed = DispatchTime.now().uptimeNanoseconds &- lastTransaction
+        if elapsed < Self.minimumGap { usleep(useconds_t((Self.minimumGap - elapsed) / 1_000)) }
+    }
+
+    private func readReply(_ service: IOAVService, into reply: inout [UInt8]) -> IOReturn {
+        defer { lastTransaction = DispatchTime.now().uptimeNanoseconds }
+        return reply.withUnsafeMutableBytes { raw -> IOReturn in
+            IOAVServiceReadI2C(service, 0x37, 0x51, raw.baseAddress!, UInt32(raw.count))
+        }
+    }
 
     func invalidate() { cache.removeAll() }
 
@@ -87,9 +105,7 @@ final class Arm64DDC: @unchecked Sendable {
                 guard send(request, to: service) else { continue }
                 usleep(50_000) // monitors need time to prepare the reply
                 var reply = [UInt8](repeating: 0, count: DDCPacket.replyLength)
-                let result = reply.withUnsafeMutableBytes { raw -> IOReturn in
-                    IOAVServiceReadI2C(service, 0x37, 0x51, raw.baseAddress!, UInt32(raw.count))
-                }
+                let result = readReply(service, into: &reply)
                 if result == KERN_SUCCESS, let value = DDCPacket.parseReply(reply, vcp: vcp) {
                     cache[display] = service
                     return value
@@ -118,9 +134,7 @@ final class Arm64DDC: @unchecked Sendable {
                     guard send(request, to: service) else { continue }
                     usleep(60_000) // MCCS allows the monitor 50 ms to prepare a reply
                     var reply = [UInt8](repeating: 0, count: DDCPacket.capabilitiesReplyLength)
-                    let result = reply.withUnsafeMutableBytes { raw -> IOReturn in
-                        IOAVServiceReadI2C(service, 0x37, 0x51, raw.baseAddress!, UInt32(raw.count))
-                    }
+                    let result = readReply(service, into: &reply)
                     if result == KERN_SUCCESS, let data = DDCPacket.parseCapabilitiesReply(reply, offset: offset) {
                         fragment = data
                         seeds = [seed] // this monitor's checksum convention; skip the other from now on
@@ -159,10 +173,11 @@ final class Arm64DDC: @unchecked Sendable {
     private func send(_ bytes: [UInt8], to service: IOAVService) -> Bool {
         // A couple of retries: DDC is a lossy, best-effort bus.
         for attempt in 0..<3 {
-            usleep(10_000)
+            pace()
             let result = bytes.withUnsafeBytes { raw -> IOReturn in
                 IOAVServiceWriteI2C(service, 0x37, 0x51, raw.baseAddress!, UInt32(bytes.count))
             }
+            lastTransaction = DispatchTime.now().uptimeNanoseconds
             if result == KERN_SUCCESS { return true }
             Log.ddc.debug("IOAVServiceWriteI2C attempt \(attempt) failed: \(result)")
         }

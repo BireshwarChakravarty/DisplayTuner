@@ -18,22 +18,6 @@ enum AutoSwitchSettings {
     }
 }
 
-/// The colour preset each monitor used before the app switched it to sRGB.
-enum RememberedPresets {
-    private static let key = "rememberedColorPresets"
-
-    static var all: [String: UInt16] {
-        let stored = UserDefaults.standard.dictionary(forKey: key) as? [String: Int] ?? [:]
-        return stored.mapValues { UInt16(clamping: $0) }
-    }
-
-    static func set(_ value: UInt16, for display: String) {
-        var stored = UserDefaults.standard.dictionary(forKey: key) as? [String: Int] ?? [:]
-        stored[display] = Int(value)
-        UserDefaults.standard.set(stored, forKey: key)
-    }
-}
-
 extension AppModel {
     /// Watch which app is in front. Switching only happens while the setting is on.
     func startAutoSwitching() {

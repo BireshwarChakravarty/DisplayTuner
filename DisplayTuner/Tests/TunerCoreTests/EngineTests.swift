@@ -225,16 +225,6 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(rec.notes.contains { $0.contains("224 pixels per inch") })
     }
 
-    func testMacBookLookLeavesTheMonitorsSRGBPreset() throws {
-        let acer = Fixtures.acer(ddc: .available([
-            VCP.brightness: VCPValue(current: 30, max: 100),
-            VCP.colorPreset: VCPValue(current: ColorPreset.sRGB.rawValue, max: 0x0B)
-        ]))
-        let rec = RecommendationEngine.recommend(.macbookLook, for: acer, context: context([acer]))
-        guard case .ddc(let preset) = try XCTUnwrap(change("ddc-preset", in: rec)).change else { return XCTFail() }
-        XCTAssertNotEqual(preset.value, .raw(ColorPreset.sRGB.rawValue))
-    }
-
     func testCalibrationProfileIsLeftAlone() {
         let acer = Fixtures.acer(customProfile: "/Users/me/Library/ColorSync/Profiles/XV272K calibrated.icc")
         for useCase in UseCase.allCases {
@@ -273,7 +263,7 @@ final class EngineTests: XCTestCase {
         XCTAssertNil(rec.profile)
         XCTAssertNil(change("profile", in: rec)) // already on its own profile
         XCTAssertTrue(rec.warnings.contains { $0.contains("wide-gamut") })
-        XCTAssertNotNil(change("ddc-preset", in: rec))
+        XCTAssertNil(change("ddc-preset", in: rec))
         XCTAssertTrue(rec.manualSteps.contains { $0.setting == "Picture mode" })
     }
 }

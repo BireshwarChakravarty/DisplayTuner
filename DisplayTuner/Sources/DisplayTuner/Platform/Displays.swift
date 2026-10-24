@@ -74,8 +74,10 @@ enum DisplayModes {
             usableForDesktop: mode.isUsableForDesktopGUI())
     }
 
-    /// Switch a display to `mode`. Persists across restarts, like System Settings.
-    static func apply(_ mode: DisplayMode, to id: CGDirectDisplayID) -> Bool {
+    /// Switch a display to `mode`. `permanent` keeps it across restarts, like
+    /// System Settings; otherwise it lasts for this login session only, so an
+    /// unconfirmed change can't outlive a crash or restart.
+    static func apply(_ mode: DisplayMode, to id: CGDirectDisplayID, permanent: Bool = true) -> Bool {
         let candidates = all(for: id)
         guard let target = candidates.first(where: { $0.ioDisplayModeID == mode.modeID && model($0).matches(mode) })
                 ?? candidates.first(where: { model($0).matches(mode) }) else {
@@ -88,7 +90,7 @@ enum DisplayModes {
             CGCancelDisplayConfiguration(config)
             return false
         }
-        return CGCompleteDisplayConfiguration(config, .permanently) == .success
+        return CGCompleteDisplayConfiguration(config, permanent ? .permanently : .forSession) == .success
     }
 }
 

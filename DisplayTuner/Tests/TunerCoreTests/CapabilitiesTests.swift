@@ -87,52 +87,22 @@ final class CapabilityEngineTests: XCTestCase {
         rec.changes.first { $0.id == id }
     }
 
-    func testListedSRGBPresetIsSwitchedAutomatically() throws {
-        let display = acer(preset: 0x05, capabilities: "(vcp(10 12 14(01 05 0B)))")
-        let rec = RecommendationEngine.recommend(.photoEditing, for: display, context: EngineContext(lighting: .normal, allDisplays: [display]))
-        let preset = try XCTUnwrap(change("ddc-preset", in: rec))
-        XCTAssertTrue(preset.onByDefault)
-        XCTAssertFalse(preset.isExperimental)
-        XCTAssertEqual(preset.change, .ddc(DDCTarget(vcp: VCP.colorPreset, value: .raw(0x01))))
-        XCTAssertTrue(rec.manualSteps.contains { $0.setting == "Mode" && $0.value.contains("the app switches this") })
-    }
-
-    func testUnknownCapabilitiesKeepItExperimental() throws {
-        let display = acer(preset: 0x05, capabilities: nil)
-        let rec = RecommendationEngine.recommend(.photoEditing, for: display, context: EngineContext(lighting: .normal, allDisplays: [display]))
-        let preset = try XCTUnwrap(change("ddc-preset", in: rec))
-        XCTAssertFalse(preset.onByDefault)
-        XCTAssertTrue(preset.isExperimental)
-        XCTAssertTrue(rec.manualSteps.contains { $0.setting == "Mode" && $0.value == "sRGB" })
-    }
-
-    func testUnlistedSRGBIsNeverOffered() {
-        let display = acer(preset: 0x05, capabilities: "(vcp(10 12 14(05 08 0B)))")
-        let rec = RecommendationEngine.recommend(.photoEditing, for: display, context: EngineContext(lighting: .normal, allDisplays: [display]))
-        XCTAssertNil(change("ddc-preset", in: rec))
-    }
-
-    func testAlreadyInSRGBNeedsNoSwitch() {
-        let display = acer(preset: 0x01, capabilities: "(vcp(10 12 14(01 05 0B)))")
-        let rec = RecommendationEngine.recommend(.videoEditing, for: display, context: EngineContext(lighting: .normal, allDisplays: [display]))
-        XCTAssertNil(change("ddc-preset", in: rec))
-    }
-
-    func testGamingRestoresTheRememberedPreset() throws {
-        let display = acer(preset: 0x01, capabilities: "(vcp(10 12 14(01 05 0B)))")
-        let context = EngineContext(lighting: .normal, allDisplays: [display], rememberedColorPresets: [display.key: 0x0B])
-        let rec = RecommendationEngine.recommend(.immersiveGaming, for: display, context: context)
-        let preset = try XCTUnwrap(change("ddc-preset", in: rec))
-        XCTAssertEqual(preset.change, .ddc(DDCTarget(vcp: VCP.colorPreset, value: .raw(0x0B))))
-        XCTAssertTrue(preset.onByDefault)
-        XCTAssertTrue(preset.detail.contains("User 1"))
-    }
-
-    func testGamingWithoutMemoryStaysExperimental() throws {
-        let display = acer(preset: 0x01, capabilities: "(vcp(10 12 14(01 05 0B)))")
-        let rec = RecommendationEngine.recommend(.competitiveGaming, for: display, context: EngineContext(lighting: .normal, allDisplays: [display]))
-        let preset = try XCTUnwrap(change("ddc-preset", in: rec))
-        XCTAssertFalse(preset.onByDefault)
+    /// Acer documents no DDC/CI colour presets and warns against adjusting
+    /// undocumented controls, so no preset ever plans a 0x14 write, even
+    /// when the monitor lists sRGB among its values.
+    func testNoPresetEverWritesTheColourPreset() {
+        for capabilities in ["(vcp(10 12 14(01 05 0B)))", nil] {
+            for preset: UInt16 in [0x01, 0x05] {
+                let display = acer(preset: preset, capabilities: capabilities)
+                for useCase in UseCase.allCases {
+                    let rec = RecommendationEngine.recommend(useCase, for: display, context: EngineContext(lighting: .normal, allDisplays: [display]))
+                    XCTAssertFalse(rec.changes.contains {
+                        if case .ddc(let target) = $0.change { return target.vcp == VCP.colorPreset }
+                        return false
+                    }, "\(useCase) planned a colour-preset write")
+                }
+            }
+        }
     }
 }
 

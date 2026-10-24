@@ -8,17 +8,13 @@ public struct EngineContext: Sendable {
     public var nightShiftEnabled: Bool?
     /// Switchboard dims below a monitor's minimum through the colour table.
     public var switchboardInstalled: Bool
-    /// The colour preset (VCP 0x14) each monitor used before the app switched
-    /// it to sRGB, by DisplayFacts.key, so gaming can put it back.
-    public var rememberedColorPresets: [String: UInt16]
 
     public init(lighting: RoomLighting, allDisplays: [DisplayFacts], nightShiftEnabled: Bool? = nil,
-                switchboardInstalled: Bool = false, rememberedColorPresets: [String: UInt16] = [:]) {
+                switchboardInstalled: Bool = false) {
         self.lighting = lighting
         self.allDisplays = allDisplays
         self.nightShiftEnabled = nightShiftEnabled
         self.switchboardInstalled = switchboardInstalled
-        self.rememberedColorPresets = rememberedColorPresets
     }
 }
 
@@ -55,9 +51,6 @@ public enum RecommendationEngine {
         var modeOptions: [DisplayMode] = []
         var usedSources: [Source] = []
         var targetMode: DisplayMode?
-        /// The monitor's picture mode is switched over DDC/CI with the
-        /// monitor's own confirmation that it supports the value.
-        var presetOverDDC = false
 
         init(useCase: UseCase, display: DisplayFacts, context: EngineContext, profile: MonitorProfile?) {
             self.useCase = useCase
@@ -231,21 +224,6 @@ public enum RecommendationEngine {
                             why: "Pairs with the monitor's sRGB mode: macOS then knows the screen shows exactly sRGB, so colour-managed and unmanaged apps agree. Switch the monitor to sRGB mode at the same time (see Monitor menu).",
                             onByDefault: true))
                     }
-                    if let preset = ddcValues[VCP.colorPreset], preset.current != ColorPreset.sRGB.rawValue,
-                       presetMayBe(ColorPreset.sRGB.rawValue) {
-                        let confirmed = display.capabilities?.supports(VCP.colorPreset, value: ColorPreset.sRGB.rawValue) == true
-                        presetOverDDC = confirmed
-                        changes.append(PlannedChange(
-                            id: "ddc-preset",
-                            change: .ddc(DDCTarget(vcp: VCP.colorPreset, value: .raw(ColorPreset.sRGB.rawValue))),
-                            title: "Monitor picture mode",
-                            detail: "\(ColorPreset.name(preset.current)) → sRGB",
-                            why: confirmed
-                                ? "Your monitor lists sRGB among its colour presets (it reported this over DDC/CI), so the app switches it for you and reads it back to check. Glance at the monitor's menu once to confirm it shows sRGB."
-                                : "Some monitors switch to their sRGB mode when asked over DDC/CI. The app reads it back to check. If the monitor's menu doesn't show sRGB afterwards, set it by hand.",
-                            onByDefault: confirmed,
-                            isExperimental: !confirmed))
-                    }
                 } else {
                     if display.customProfilePath != nil {
                         changes.append(PlannedChange(
@@ -256,16 +234,6 @@ public enum RecommendationEngine {
                     }
                     if isWideGamut {
                         warnings.append("This is a wide-gamut panel without a known sRGB mode. Colour-managed apps (Photoshop, Lightroom, Photos, Safari) are only as accurate as the profile macOS made from its EDID, and other apps will look oversaturated. Calibrating with a colorimeter is the only way to be exact.")
-                    }
-                    if let preset = ddcValues[VCP.colorPreset], preset.current != ColorPreset.k6500.rawValue,
-                       presetMayBe(ColorPreset.k6500.rawValue) {
-                        changes.append(PlannedChange(
-                            id: "ddc-preset",
-                            change: .ddc(DDCTarget(vcp: VCP.colorPreset, value: .raw(ColorPreset.k6500.rawValue))),
-                            title: "White point over DDC",
-                            detail: "→ 6500 K (MCCS 0x14 = 0x05)",
-                            why: "D65 (6500 K) is the white point sRGB, Display P3 and Rec. 709 all assume.",
-                            onByDefault: true))
                     }
                 }
             } else {
@@ -279,23 +247,6 @@ public enum RecommendationEngine {
                             : "The display's own profile describes its native colours.",
                         onByDefault: true))
                 }
-                if profile?.specs.hasSRGBMode == true,
-                   ddcValues[VCP.colorPreset]?.current == ColorPreset.sRGB.rawValue {
-                    let remembered = context.rememberedColorPresets[display.key]
-                    let target = remembered ?? ColorPreset.native.rawValue
-                    let confirmed = remembered != nil || display.capabilities?.supports(VCP.colorPreset, value: target) == true
-                    presetOverDDC = confirmed
-                    changes.append(PlannedChange(
-                        id: "ddc-preset",
-                        change: .ddc(DDCTarget(vcp: VCP.colorPreset, value: .raw(target))),
-                        title: "Monitor picture mode",
-                        detail: "sRGB → \(ColorPreset.name(target))",
-                        why: remembered != nil
-                            ? "Puts the monitor back on the preset it used before the app switched it to sRGB, so games get the full native gamut again."
-                            : "Leaves the monitor's sRGB preset for its native one. If the monitor's menu still shows sRGB afterwards, change it by hand.",
-                        onByDefault: confirmed,
-                        isExperimental: !confirmed))
-                }
                 if useCase == .macbookLook {
                     if isWideGamut {
                         notes.append("This is how a MacBook gets its look: a P3-class panel in its native mode, described by its own profile, so macOS colour-manages everything. Photos, video and apps made for P3 show their full, vivid colour, while plain sRGB content stays true instead of looking overcooked. Leave the monitor's saturation and colour boost at their defaults; boosting them only oversaturates skin tones.")
@@ -307,13 +258,6 @@ public enum RecommendationEngine {
                     notes.append("In its native mode this panel shows more saturated colour than sRGB. Most games aren't colour-managed, so colours look punchier than intended. Many players like this; the editing presets make it accurate.")
                 }
             }
-        }
-
-        /// False only when the monitor enumerated its colour presets and
-        /// `value` isn't one of them.
-        func presetMayBe(_ value: UInt16) -> Bool {
-            guard let listed = display.capabilities?.vcp[VCP.colorPreset], !listed.isEmpty else { return true }
-            return listed.contains(value)
         }
 
         // MARK: Brightness and contrast
@@ -390,12 +334,6 @@ public enum RecommendationEngine {
             }
             if let profile {
                 for item in profile.osd where item.useCases.contains(useCase) {
-                    if item.setting == "Mode" && presetOverDDC {
-                        step(.monitorMenu, item.setting, item.value + " (the app switches this for you)", path: item.path,
-                             why: "Your monitor reported this preset over DDC/CI, so applying switches it and checks the result. Glance at the monitor's menu once to confirm. " + item.why,
-                             sources: item.sourceIDs)
-                        continue
-                    }
                     step(.monitorMenu, item.setting, item.value, path: item.path, why: item.why, sources: item.sourceIDs)
                 }
                 return
