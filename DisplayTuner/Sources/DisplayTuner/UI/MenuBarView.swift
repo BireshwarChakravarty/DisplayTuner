@@ -57,9 +57,8 @@ struct MenuBarView: View {
         if model.isBusy { return "Applying…" }
         if model.confirmation != nil { return "Confirm the new mode in the window" }
         guard let display = mainDisplay else { return "Acer XV272K V5 not connected" }
-        let count = externals.count
-        let screens = count == 1 ? "1 screen" : "\(count) screens"
-        return "\(model.useCase(for: display.id).title) · \(screens)"
+        let refresh = display.currentMode.map { " · \($0.refreshLabel)" } ?? ""
+        return "\(model.useCase(for: display.id).title)\(refresh)"
     }
 
     private func autoBanner(_ auto: AutoState) -> some View {
